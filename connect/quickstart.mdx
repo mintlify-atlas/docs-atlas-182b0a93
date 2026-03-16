@@ -1,0 +1,173 @@
+---
+title: Quickstart
+description: Build a working Pipedream Connect integration end-to-end — from creating a project to letting users connect accounts and running actions from your server.
+---
+
+This guide walks you through a complete Pipedream Connect integration. By the end, you will have:
+
+- A backend that issues Connect tokens and runs actions
+- A frontend that lets users connect their accounts
+- A working Slack message sent on behalf of a user
+
+## Prerequisites
+
+- A [Pipedream account](https://pipedream.com/auth/signup)
+- Node.js 18 or later
+- A [Pipedream project](https://pipedream.com/projects) — note its ID
+- A [Pipedream OAuth client](https://pipedream.com/docs/rest-api/auth#creating-an-oauth-client) — note the client ID and client secret
+
+## Step 1: Install the SDK
+
+```bash
+npm install @pipedream/sdk
+```
+
+## Step 2: Create the backend client
+
+On your server, create a `BackendClient` with your project credentials. This client authenticates all server-to-Pipedream API calls using OAuth client credentials.
+
+```typescript
+import { createBackendClient } from "@pipedream/sdk/server";
+
+const client = createBackendClient({
+  environment: "development",
+  projectId: process.env.PIPEDREAM_PROJECT_ID!,
+  credentials: {
+    clientId: process.env.PIPEDREAM_CLIENT_ID!,
+    clientSecret: process.env.PIPEDREAM_CLIENT_SECRET!,
+  },
+});
+```
+
+<Warning>
+  Keep your `clientSecret` and `PIPEDREAM_CLIENT_SECRET` server-side only. Never expose them in the browser or commit them to version control.
+</Warning>
+
+## Step 3: Create a Connect token
+
+Before your frontend can render the account connection UI, your server must issue a short-lived Connect token for the authenticated user.
+
+```typescript
+// Express route — or any server handler
+app.post("/api/pipedream-token", async (req, res) => {
+  const userId = req.user.id; // your own auth system
+
+  const { token, expires_at } = await client.createConnectToken({
+    external_user_id: userId,
+    allowed_origins: ["https://yourapp.com", "http://localhost:3000"],
+  });
+
+  res.json({ token, expires_at });
+});
+```
+
+The `external_user_id` can be any string that uniquely identifies a user in your system. `allowed_origins` restricts which browser origins can use the token.
+
+## Step 4: Find your app's name slug
+
+Every app in Pipedream has a **name slug** — a unique, lowercase identifier used in SDK calls. You can find it on the app's page at [pipedream.com/apps](https://pipedream.com/apps) under the **Authentication** section.
+
+For Slack, the name slug is `slack`.
+
+## Step 5: Connect an account from the browser
+
+In your frontend, create a `BrowserClient` and call `connectAccount` to launch the OAuth flow in an iframe. The `tokenCallback` fetches a fresh token from your server endpoint whenever one is needed.
+
+```typescript
+import { createFrontendClient } from "@pipedream/sdk/browser";
+
+const client = createFrontendClient({
+  externalUserId: currentUserId,
+  tokenCallback: async ({ externalUserId }) => {
+    const res = await fetch("/api/pipedream-token", {
+      method: "POST",
+      body: JSON.stringify({ externalUserId }),
+      headers: { "Content-Type": "application/json" },
+    });
+    return res.json();
+  },
+});
+
+// Trigger from a button click
+await client.connectAccount({
+  app: "slack",
+  onSuccess: ({ id }) => {
+    console.log("Connected account ID:", id);
+  },
+  onError: (err) => {
+    console.error("Connection failed:", err.message);
+  },
+  onClose: ({ successful, completed }) => {
+    if (!completed) console.log("User closed the dialog early");
+  },
+});
+```
+
+## Step 6: Run an action from your server
+
+Once your user has connected their Slack account, your server can run actions on their behalf. Use the `runAction` method with the component key and the user's configured props.
+
+To find the `authProvisionId` of the connected account, retrieve accounts for the user:
+
+```typescript
+const { data: accounts } = await client.getAccounts({
+  external_user_id: userId,
+  app: "slack",
+});
+
+const slackAccount = accounts[0];
+```
+
+Then run the action:
+
+```typescript
+const result = await client.runAction({
+  externalUserId: userId,
+  actionId: "slack-send-message",
+  configuredProps: {
+    slack: {
+      authProvisionId: slackAccount.id,
+    },
+    channel: "#general",
+    text: "Hello from Pipedream Connect!",
+  },
+});
+
+console.log(result.exports);
+```
+
+## Step 7: Deploy a trigger (optional)
+
+Triggers listen for events and emit them to a webhook. Deploy one to start receiving real-time events from your users' connected accounts.
+
+```typescript
+const trigger = await client.deployTrigger({
+  externalUserId: userId,
+  triggerId: "slack-new-message",
+  configuredProps: {
+    slack: {
+      authProvisionId: slackAccount.id,
+    },
+  },
+  webhookUrl: "https://yourapp.com/webhooks/slack",
+});
+
+console.log("Deployed trigger ID:", trigger.data.id);
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Backend client reference" icon="server" href="/connect/sdk/backend-client">
+    Full API reference for all backend client methods.
+  </Card>
+  <Card title="React components" icon="react" href="/connect/react/overview">
+    Use prebuilt React components to let users configure actions and triggers.
+  </Card>
+  <Card title="Connect tokens" icon="key" href="/connect/auth/tokens">
+    Learn how Connect tokens work and how to configure them.
+  </Card>
+  <Card title="External users" icon="users" href="/connect/auth/external-users">
+    Manage external users and their connected accounts.
+  </Card>
+</CardGroup>

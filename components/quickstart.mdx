@@ -1,0 +1,189 @@
+---
+title: Component quickstart
+description: Build and deploy your first Pipedream event source and action from scratch.
+---
+
+This guide walks you through building two components: an event source that polls a public API for new data, and an action that creates a GitHub issue. By the end you will have a working source and action deployed to your Pipedream account.
+
+## Prerequisites
+
+- A [Pipedream account](https://pipedream.com)
+- The [Pipedream CLI](https://pipedream.com/docs/cli/reference/) installed and authenticated
+- Node.js 18+ installed locally
+
+<Tip>
+You can develop components entirely in the browser using the Pipedream Gitpod workspace without installing anything locally. Open your fork at `https://gitpod.io/#https://github.com/<your-username>/pipedream`.
+</Tip>
+
+## Build your first source
+
+<Steps>
+  <Step title="Create the component file">
+    Create a new file called `my-timer-source.mjs`:
+
+    ```javascript
+    import { axios } from "@pipedream/platform";
+
+    export default {
+      key: "my-timer-source",
+      name: "My Timer Source",
+      description: "Polls the JSONPlaceholder API every minute and emits new posts.",
+      version: "0.0.1",
+      type: "source",
+      props: {
+        timer: {
+          type: "$.interface.timer",
+          default: {
+            intervalSeconds: 60,
+          },
+        },
+        db: "$.service.db",
+      },
+      async run() {
+        const posts = await axios(this, {
+          url: "https://jsonplaceholder.typicode.com/posts",
+        });
+
+        const lastId = this.db.get("lastId") || 0;
+
+        const newPosts = posts.filter((post) => post.id > lastId);
+
+        for (const post of newPosts) {
+          this.$emit(post, {
+            id: post.id,
+            summary: post.title,
+            ts: Date.now(),
+          });
+        }
+
+        if (newPosts.length) {
+          this.db.set("lastId", Math.max(...newPosts.map((p) => p.id)));
+        }
+      },
+    };
+    ```
+
+    This source:
+    - Runs on a 60-second timer
+    - Uses `$.service.db` to persist the last seen post ID across runs
+    - Fetches posts from a public API
+    - Emits only new posts using `this.$emit()`
+  </Step>
+
+  <Step title="Deploy the source">
+    Deploy the source with the Pipedream CLI:
+
+    ```bash
+    pd deploy my-timer-source.mjs
+    ```
+
+    The CLI will print a source ID and a link to the source in your Pipedream dashboard. The source will run immediately on deploy, then every 60 seconds.
+  </Step>
+
+  <Step title="Inspect emitted events">
+    List the most recent events emitted by your source:
+
+    ```bash
+    pd events -n 10 my-timer-source
+    ```
+
+    Each line is a JSON event payload. You can also view events in the Pipedream UI under **Sources**.
+  </Step>
+</Steps>
+
+## Build your first action
+
+<Steps>
+  <Step title="Create the action file">
+    Create a file called `create-github-issue.mjs`:
+
+    ```javascript
+    import { axios } from "@pipedream/platform";
+
+    export default {
+      key: "create-github-issue",
+      name: "Create GitHub Issue",
+      description: "Creates a new issue in a GitHub repository.",
+      version: "0.0.1",
+      type: "action",
+      props: {
+        github: {
+          type: "app",
+          app: "github",
+        },
+        repoFullname: {
+          type: "string",
+          label: "Repository",
+          description: "The full repository name, e.g. `owner/repo`.",
+        },
+        title: {
+          type: "string",
+          label: "Title",
+          description: "The title of the issue.",
+        },
+        body: {
+          type: "string",
+          label: "Body",
+          description: "The body text of the issue.",
+          optional: true,
+        },
+      },
+      async run({ $ }) {
+        const response = await axios($, {
+          method: "POST",
+          url: `https://api.github.com/repos/${this.repoFullname}/issues`,
+          headers: {
+            Authorization: `token ${this.github.$auth.oauth_access_token}`,
+            "X-GitHub-Api-Version": "2022-11-28",
+          },
+          data: {
+            title: this.title,
+            body: this.body,
+          },
+        });
+
+        $.export("$summary", `Created issue #${response.number}: ${response.title}`);
+
+        return response;
+      },
+    };
+    ```
+
+    This action:
+    - Connects a GitHub account via the `app` prop
+    - Accepts a repository name, issue title, and optional body as inputs
+    - POSTs to the GitHub REST API using the connected account's OAuth token
+    - Sets a human-readable `$summary` and returns the full API response
+  </Step>
+
+  <Step title="Publish the action">
+    Publish the action to your Pipedream account:
+
+    ```bash
+    pd publish create-github-issue.mjs
+    ```
+
+    The action is now available in any workflow under **My Actions**.
+  </Step>
+
+  <Step title="Use the action in a workflow">
+    Open any workflow in Pipedream and add a new step. Search for "Create GitHub Issue" under **My Actions**. Connect your GitHub account, fill in the repository and title, and run the workflow.
+  </Step>
+</Steps>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Component structure" icon="code" href="/components/component-structure">
+    Explore all component fields: props, hooks, methods, and dedupe.
+  </Card>
+  <Card title="Props reference" icon="list" href="/components/actions/props">
+    Every prop type documented with examples.
+  </Card>
+  <Card title="HTTP sources" icon="globe" href="/components/sources/http">
+    Expose a webhook endpoint and emit events from incoming requests.
+  </Card>
+  <Card title="Timer sources" icon="clock" href="/components/sources/timer">
+    Poll APIs on a schedule using the timer interface prop.
+  </Card>
+</CardGroup>

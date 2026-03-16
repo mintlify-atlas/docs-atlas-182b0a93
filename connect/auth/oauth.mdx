@@ -1,0 +1,103 @@
+---
+title: OAuth client configuration
+description: Configure custom OAuth applications in Pipedream Connect so users connect through your own OAuth credentials instead of Pipedream's defaults.
+---
+
+By default, when a user connects an OAuth app through Pipedream Connect, the OAuth flow runs under Pipedream's registered OAuth application. You can override this per-app to use your own OAuth client credentials — giving users a connection prompt branded with your application name and granting you direct control over OAuth scopes.
+
+## When to use a custom OAuth client
+
+- **Branding** — Users see your app name in the OAuth consent screen instead of Pipedream.
+- **Scope control** — Request only the scopes your integration needs.
+- **Compliance** — Some enterprise policies require OAuth grants to be owned by the integrating application.
+- **App-specific limits** — Some OAuth providers restrict the number of users who can authorize a development app; using your own app removes that limit.
+
+## Create an OAuth client in Pipedream
+
+Before you can use your own OAuth credentials, register them with Pipedream:
+
+<Steps>
+  <Step title="Open the OAuth clients page">
+    In the [Pipedream dashboard](https://pipedream.com), navigate to your project and open the **OAuth Clients** section.
+  </Step>
+  <Step title="Create a new client">
+    Select the app you want to configure (e.g. GitHub, Slack, Google Sheets). Enter your OAuth client ID and client secret from that app's developer settings.
+  </Step>
+  <Step title="Copy the OAuth App ID">
+    After saving, Pipedream assigns an OAuth App ID in the format `oa_xxxxxxx`. Copy this — you'll use it in the SDK and React components.
+  </Step>
+</Steps>
+
+<Note>
+  OAuth App IDs (the `oa_` prefixed IDs) are not sensitive. It is safe to include them in client-side code.
+</Note>
+
+## Use a custom OAuth app in the React component
+
+Pass the `oauthAppConfig` prop to `ComponentFormContainer` or `ComponentForm`, mapping app name slugs to OAuth App IDs:
+
+```tsx
+const oauthAppConfig = {
+  github: "oa_abc123",
+  google_sheets: "oa_def456",
+  slack: "oa_ghi789",
+};
+
+<ComponentFormContainer
+  userId={userId}
+  componentKey="github-create-issue"
+  configuredProps={configuredProps}
+  onUpdateConfiguredProps={setConfiguredProps}
+  oauthAppConfig={oauthAppConfig}
+/>
+```
+
+When a user clicks the connect button for an app that has a configured OAuth App ID, Pipedream uses your OAuth client for the authorization flow.
+
+## Use a custom OAuth app with the frontend SDK
+
+When calling `connectAccount` directly from the frontend client, pass `oauthAppId`:
+
+```typescript
+await client.connectAccount({
+  app: "github",
+  oauthAppId: "oa_abc123",
+  onSuccess: ({ id }) => {
+    console.log("Connected via custom OAuth app:", id);
+  },
+});
+```
+
+## Retrieving accounts by OAuth App ID
+
+You can filter connected accounts by OAuth App ID when retrieving them from the backend:
+
+```typescript
+const { data: accounts } = await client.getAccounts({
+  external_user_id: "user-123",
+  oauth_app_id: "oa_abc123",
+});
+```
+
+And from the `useAccounts` hook:
+
+```tsx
+const { accounts } = useAccounts({
+  external_user_id: "user-123",
+  oauth_app_id: "oa_abc123",
+});
+```
+
+## Supported OAuth apps
+
+Custom OAuth clients are supported for any app that uses OAuth as its authentication type. Apps using API keys or other authentication methods do not support custom OAuth clients.
+
+Check an app's `auth_type` field to determine if it supports OAuth:
+
+```typescript
+const { data: app } = await client.getApp("github");
+
+if (app.auth_type === "oauth") {
+  console.log("Custom OAuth client is supported");
+}
+```

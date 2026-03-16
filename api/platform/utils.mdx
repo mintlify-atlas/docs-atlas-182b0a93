@@ -1,0 +1,392 @@
+---
+title: "Platform utility functions"
+description: "Utility functions exported by the Pipedream platform package for use in workflow steps and component development."
+---
+
+The `@pipedream/platform` package exports several utility functions used in workflow steps and component development. These are available as named exports and are also used internally by Pipedream's runtime.
+
+## File utilities
+
+### `getFileStreamAndMetadata`
+
+Returns a readable stream and metadata for a file referenced by a path or URL. Supports local file paths, remote URLs, and data URLs.
+
+```typescript
+function getFileStreamAndMetadata(
+  pathOrUrl: string
+): Promise<{ stream: Readable; metadata: FileMetadata }>
+```
+
+<ParamField body="pathOrUrl" type="string" required>
+  A local file path, an HTTP/HTTPS URL, or a base64 data URL (e.g. `data:image/png;base64,...`).
+</ParamField>
+
+**Returns** a promise that resolves to:
+
+<ResponseField name="stream" type="Readable">
+  A Node.js `Readable` stream of the file content.
+</ResponseField>
+
+<ResponseField name="metadata" type="FileMetadata">
+  An object describing the file.
+  <Expandable title="FileMetadata fields">
+    <ResponseField name="size" type="number">
+      File size in bytes.
+    </ResponseField>
+    <ResponseField name="contentType" type="string">
+      MIME type of the file, if determinable (e.g. `image/png`).
+    </ResponseField>
+    <ResponseField name="lastModified" type="Date">
+      Last modified date. Available for local files and remote files that return a `Last-Modified` header.
+    </ResponseField>
+    <ResponseField name="name" type="string">
+      File name derived from the path, URL, or data URL parameters.
+    </ResponseField>
+    <ResponseField name="etag" type="string">
+      ETag from the HTTP response, if present.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+**Example**
+
+```javascript
+import { getFileStreamAndMetadata } from "@pipedream/platform";
+
+export default defineComponent({
+  async run({ steps, $ }) {
+    const { stream, metadata } = await getFileStreamAndMetadata(
+      "https://example.com/image.png"
+    );
+
+    console.log(metadata.size);        // bytes
+    console.log(metadata.contentType); // "image/png"
+    console.log(metadata.name);        // "image.png"
+
+    // Use `stream` with any API that accepts a Node.js Readable
+  },
+});
+```
+
+---
+
+### `getFileStream`
+
+Returns only the readable stream for a file, without metadata. Use `getFileStreamAndMetadata` when you need both.
+
+```typescript
+function getFileStream(pathOrUrl: string): Promise<Readable>
+```
+
+<ParamField body="pathOrUrl" type="string" required>
+  A local file path, an HTTP/HTTPS URL, or a data URL.
+</ParamField>
+
+**Returns** a promise resolving to a Node.js `Readable` stream.
+
+---
+
+## JSON utilities
+
+### `cloneSafe`
+
+Deep-clones an object by serializing it to JSON and parsing the result. Handles circular references safely — circular nodes are replaced with `null` rather than throwing.
+
+```typescript
+function cloneSafe(o: unknown): unknown
+```
+
+<ParamField body="o" type="unknown" required>
+  Any value to clone.
+</ParamField>
+
+**Returns** a deep clone of the input, or `null` if the value cannot be serialized.
+
+**Example**
+
+```javascript
+import { cloneSafe } from "@pipedream/platform";
+
+const original = { a: 1, b: { c: 2 } };
+const clone = cloneSafe(original);
+
+// original and clone are independent objects
+clone.b.c = 99;
+console.log(original.b.c); // still 2
+```
+
+---
+
+### `jsonStringifySafe`
+
+Same as `JSON.stringify` but handles circular references without throwing. Circular references are omitted from the output.
+
+```typescript
+function jsonStringifySafe(
+  v: unknown,
+  set?: Set<unknown>
+): string | undefined
+```
+
+<ParamField body="v" type="unknown" required>
+  The value to serialize.
+</ParamField>
+
+<ParamField body="set" type="Set">
+  Internal set used to track seen objects. Omit this when calling directly.
+</ParamField>
+
+**Returns** a JSON string, or `undefined` if serialization fails entirely.
+
+**Example**
+
+```javascript
+import { jsonStringifySafe } from "@pipedream/platform";
+
+const circular = {};
+circular.self = circular;
+
+// JSON.stringify(circular) would throw
+const safe = jsonStringifySafe(circular); // "{}"
+```
+
+---
+
+## Error types
+
+### `ConfigurationError`
+
+Thrown when a component receives invalid or missing configuration. Use this in your component's `run` method to surface user-facing error messages.
+
+```typescript
+class ConfigurationError extends Error {
+  name: "ConfigurationError";
+  exposeStack: boolean;
+  constructor(message: string, exposeStack?: boolean)
+}
+```
+
+<ParamField body="message" type="string" required>
+  A human-readable message describing the configuration problem.
+</ParamField>
+
+<ParamField body="exposeStack" type="boolean">
+  When `true`, the stack trace is included in the error output. Defaults to `false`.
+</ParamField>
+
+**Example**
+
+```javascript
+import { ConfigurationError } from "@pipedream/platform";
+
+export default defineComponent({
+  props: {
+    apiKey: {
+      type: "string",
+      label: "API Key",
+    },
+  },
+  async run({ steps, $ }) {
+    if (!this.apiKey.startsWith("sk-")) {
+      throw new ConfigurationError(
+        "API key must begin with \"sk-\". Check your app configuration."
+      );
+    }
+    // ...
+  },
+});
+```
+
+<Note>
+  `ConfigurationError` is distinct from a general `Error`. Pipedream's runtime detects it and displays the message as a configuration warning rather than an execution failure.
+</Note>
+
+---
+
+## Constants
+
+### `DEFAULT_POLLING_SOURCE_TIMER_INTERVAL`
+
+The default timer interval for polling event sources, in seconds.
+
+```typescript
+const DEFAULT_POLLING_SOURCE_TIMER_INTERVAL: number // 900 (15 minutes)
+```
+
+Use this constant as the default value for timer props in polling sources to maintain consistency with Pipedream's platform defaults:
+
+```javascript
+import { DEFAULT_POLLING_SOURCE_TIMER_INTERVAL } from "@pipedream/platform";
+
+export default {
+  name: "My Polling Source",
+  version: "0.0.1",
+  type: "source",
+  props: {
+    timer: {
+      type: "$.interface.timer",
+      default: {
+        intervalSeconds: DEFAULT_POLLING_SOURCE_TIMER_INTERVAL,
+      },
+    },
+  },
+  async run() {
+    // poll for new events
+  },
+};
+```
+
+---
+
+## $end
+
+Terminates the current workflow execution early with an optional message. No subsequent steps run.
+
+```typescript
+function $end(message?: string): void
+```
+
+<ParamField body="message" type="string">
+  Optional message to display in the workflow execution log.
+</ParamField>
+
+**Example**
+
+```javascript
+export default defineComponent({
+  async run({ steps, $ }) {
+    if (!steps.trigger.event.body.proceed) {
+      $.end("Skipping — proceed flag not set");
+    }
+
+    // Only reached if $.end was not called
+    return "Processing...";
+  },
+});
+```
+
+<Note>
+  Calling `$.end` throws an internal error marker that Pipedream's runtime recognizes as a clean stop — not an error condition. The workflow execution is shown as successful in the event history.
+</Note>
+
+---
+
+## $send destinations
+
+The `$send` object provides methods for delivering data asynchronously to common destinations.
+
+### `$send.http`
+
+```typescript
+$send.http(config: SendConfigHTTP): void
+```
+
+<ParamField body="config.method" type="string" required>
+  HTTP method. One of `GET`, `HEAD`, `POST`, `PUT`, `DELETE`, `CONNECT`, `OPTIONS`, `TRACE`, `PATCH`.
+</ParamField>
+
+<ParamField body="config.url" type="string" required>
+  Destination URL.
+</ParamField>
+
+<ParamField body="config.data" type="string | object">
+  Request body.
+</ParamField>
+
+<ParamField body="config.headers" type="object">
+  HTTP headers to include.
+</ParamField>
+
+<ParamField body="config.params" type="object">
+  Query parameters.
+</ParamField>
+
+<ParamField body="config.auth" type="object">
+  Basic auth credentials: `{ username, password }`.
+</ParamField>
+
+### `$send.email`
+
+```typescript
+$send.email(config: SendConfigEmail): void
+```
+
+<ParamField body="config.subject" type="string">
+  Email subject line.
+</ParamField>
+
+<ParamField body="config.text" type="string">
+  Plain text email body.
+</ParamField>
+
+<ParamField body="config.html" type="string">
+  HTML email body.
+</ParamField>
+
+### `$send.s3`
+
+```typescript
+$send.s3(config: SendConfigS3): void
+```
+
+<ParamField body="config.bucket" type="string" required>
+  S3 bucket name.
+</ParamField>
+
+<ParamField body="config.prefix" type="string" required>
+  Key prefix for the uploaded object.
+</ParamField>
+
+<ParamField body="config.payload" type="string | object" required>
+  Data to upload.
+</ParamField>
+
+### `$send.emit`
+
+Emits an event from a source component.
+
+```typescript
+$send.emit(config: SendConfigEmit): void
+```
+
+<ParamField body="config.raw_event" type="object" required>
+  The raw event object to emit.
+</ParamField>
+
+<ParamField body="config.event" type="object">
+  An optional normalized event object.
+</ParamField>
+
+### `$send.sse`
+
+Publishes an event to a Server-Sent Events stream.
+
+```typescript
+$send.sse(config: SendConfigSSE): void
+```
+
+<ParamField body="config.channel" type="string" required>
+  The SSE channel name.
+</ParamField>
+
+<ParamField body="config.payload" type="string | object" required>
+  Data to publish.
+</ParamField>
+
+### `$send.snowflake`
+
+Inserts data into a Snowflake table via Snowpipe.
+
+```typescript
+$send.snowflake(config: SendConfigSnowflake): void
+```
+
+<ParamField body="config.account" type="string" required>Snowflake account identifier.</ParamField>
+<ParamField body="config.host" type="string" required>Snowflake host URL.</ParamField>
+<ParamField body="config.user" type="string" required>Snowflake username.</ParamField>
+<ParamField body="config.private_key" type="string" required>Private key for authentication.</ParamField>
+<ParamField body="config.database" type="string" required>Target database name.</ParamField>
+<ParamField body="config.schema" type="string" required>Target schema name.</ParamField>
+<ParamField body="config.pipe_name" type="string" required>Snowpipe name.</ParamField>
+<ParamField body="config.stage_name" type="string" required>Snowflake stage name.</ParamField>
+<ParamField body="config.payload" type="string | object" required>Data to insert.</ParamField>

@@ -1,0 +1,94 @@
+---
+title: "Destinations"
+description: "Send data asynchronously to external services. Destinations handle connection, batching, and delivery so you don't have to."
+---
+
+Destinations let you send data from your workflows to external services without managing connection details or retry logic. Unlike regular code steps, destination calls are **asynchronous** — Pipedream queues the delivery and your workflow step completes immediately.
+
+## Available destinations
+
+<CardGroup cols={2}>
+  <Card title="Amazon S3" icon="database" href="/destinations/s3">
+    Write event payloads to an S3 bucket with a configurable prefix.
+  </Card>
+  <Card title="Snowflake" icon="snowflake" href="/destinations/snowflake">
+    Insert rows into a Snowflake table using Snowpipe for streaming ingestion.
+  </Card>
+  <Card title="HTTP" icon="globe" href="/destinations/http">
+    Send HTTP requests to any URL with custom headers, query params, and body.
+  </Card>
+  <Card title="Email" icon="envelope" href="/destinations/email">
+    Send email to the address associated with your Pipedream account.
+  </Card>
+  <Card title="SSE" icon="rss" href="/destinations/sse">
+    Publish events to a named SSE channel consumable via Pipedream's SSE API.
+  </Card>
+</CardGroup>
+
+## How destinations work
+
+Destinations are called using the `$send` object in Node.js code steps. Each destination has its own method:
+
+```javascript
+export default defineComponent({
+  async run({ steps, $ }) {
+    // Send to S3
+    $send.s3({
+      bucket: "my-bucket",
+      prefix: "events/",
+      payload: steps.trigger.event,
+    })
+
+    // Send an HTTP request
+    $send.http({
+      method: "POST",
+      url: "https://hooks.example.com/ingest",
+      data: steps.trigger.event,
+    })
+
+    // Both deliveries are queued; this line runs immediately
+    return "Destinations queued"
+  }
+})
+```
+
+## Asynchronous delivery
+
+Calling a `$send` method does **not** wait for the delivery to complete. The call returns immediately after Pipedream queues the message. This means:
+
+- Your workflow step finishes quickly regardless of destination latency
+- You cannot inspect the delivery response in code
+- Delivery failures appear in your workflow's error logs, not as step errors
+
+<Note>
+  If you need to inspect the response from an external service (for example, to use the response in a later step), use a regular HTTP request in a code step instead of a destination.
+</Note>
+
+## Multiple destinations in one step
+
+You can call multiple `$send` methods in a single step. Each delivery is queued independently:
+
+```javascript
+export default defineComponent({
+  async run({ steps, $ }) {
+    const event = steps.trigger.event
+
+    $send.s3({
+      bucket: "events-archive",
+      prefix: "raw/",
+      payload: event,
+    })
+
+    $send.http({
+      method: "POST",
+      url: "https://webhook.example.com",
+      data: event.body,
+    })
+
+    $send.email({
+      subject: `New event: ${event.body.type}`,
+      text: JSON.stringify(event.body, null, 2),
+    })
+  }
+})
+```

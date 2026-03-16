@@ -1,0 +1,290 @@
+---
+title: Component structure
+description: Reference for every field in a Pipedream component — props, the run method, lifecycle hooks, methods, dedupe, and more.
+---
+
+A Pipedream component is a plain JavaScript object with a defined set of fields. This page documents every field you can use in a source or action component.
+
+## Top-level fields
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `key` | `string` | Yes | Unique component identifier. For registry components, must be prefixed with the app slug, e.g. `github-create-issue`. |
+| `name` | `string` | Recommended | Human-readable display name shown in the Pipedream UI. |
+| `description` | `string` | Recommended | Short description of what the component does. Supports Markdown. |
+| `version` | `string` | Yes | Semver version string, e.g. `0.1.0`. Bump on every published change. |
+| `type` | `"source"` \| `"action"` | Yes | Determines how Pipedream treats the component. |
+| `props` | `object` | No | Configuration inputs shown to the user. See [Props](#props). |
+| `methods` | `object` | No | Helper methods available via `this` inside `run` and hooks. |
+| `hooks` | `object` | Sources only | Lifecycle callbacks. See [Hooks](#hooks). |
+| `dedupe` | `string` | Sources only | Deduplication strategy. See [Dedupe](#dedupe). |
+| `run` | `function` | Yes | Main execution function. |
+| `additionalProps` | `function` | No | Async function that returns extra prop definitions based on already-configured props. |
+| `annotations` | `object` | Actions only | MCP tool hints (`destructiveHint`, `readOnlyHint`, etc.). |
+
+## Props
+
+Props are typed input fields that appear in the Pipedream UI when a user configures a component. Every prop is a key on the `props` object; that key becomes available as `this.<propName>` inside `run` and `methods`.
+
+```javascript
+export default {
+  key: "example",
+  version: "0.0.1",
+  type: "action",
+  props: {
+    message: {
+      type: "string",
+      label: "Message",
+      description: "The text to log.",
+    },
+  },
+  async run({ $ }) {
+    console.log(this.message); // value entered by the user
+  },
+};
+```
+
+See the [Props reference](/components/actions/props) for every prop type.
+
+### Prop definitions
+
+App components can define `propDefinitions` — reusable prop configurations that other components can reference:
+
+```javascript
+// github.app.mjs
+export default {
+  type: "app",
+  app: "github",
+  propDefinitions: {
+    repoFullname: {
+      label: "Repository",
+      type: "string",
+      async options() {
+        const repos = await this.getRepos();
+        return repos.map((r) => r.full_name);
+      },
+    },
+  },
+};
+
+// create-issue.mjs
+import github from "../../github.app.mjs";
+
+export default {
+  key: "github-create-issue",
+  version: "0.0.1",
+  type: "action",
+  props: {
+    github,
+    repoFullname: {
+      propDefinition: [github, "repoFullname"], // reference the prop definition above
+    },
+  },
+};
+```
+
+Pass a third element to the tuple to supply extra options to the prop definition (useful for filtering async options based on another prop):
+
+```javascript
+branch: {
+  propDefinition: [
+    github,
+    "branch",
+    (c) => ({ repoFullname: c.repoFullname }),
+  ],
+},
+```
+
+### Dynamic props with `additionalProps`
+
+Use `additionalProps` to conditionally show or hide props based on values the user has already entered:
+
+```javascript
+export default {
+  key: "github-create-issue",
+  version: "0.0.3",
+  type: "action",
+  props: {
+    github,
+    repoFullname: {
+      propDefinition: [github, "repoFullname"],
+      reloadProps: true, // triggers additionalProps when this prop changes
+    },
+  },
+  async additionalProps() {
+    const canPush = await this.checkPushPermission();
+    return canPush
+      ? {
+          assignees: { type: "string[]", label: "Assignees", optional: true },
+          labels: { type: "string[]", label: "Labels", optional: true },
+        }
+      : {};
+  },
+};
+```
+
+Set `reloadProps: true` on any prop to trigger `additionalProps` whenever that prop's value changes.
+
+## The `run` method
+
+### Sources
+
+For sources, `run` receives the trigger event as its argument. The shape of the event depends on the interface prop:
+
+- **HTTP sources** receive `{ method, path, query, headers, body, bodyRaw }`
+- **Timer sources** receive `{ timestamp, interval_seconds }`
+
+Inside `run`, call `this.$emit(event, metadata)` to emit events downstream:
+
+```javascript
+async run(event) {
+  // event.method, event.path, event.body, etc. for HTTP sources
+  this.$emit(event.body, {
+    id: event.body.id,       // required when dedupe is set
+    summary: "New webhook",  // shown in the Pipedream event list
+    ts: Date.now(),          // timestamp in milliseconds
+  });
+},
+```
+
+### Actions
+
+For actions, `run` receives `{ $, steps }` as its argument:
+
+- **`$`** is a `Pipedream` object with helpers: `$.export()`, `$.respond()`, `$.flow`, `$.files`
+- **`steps`** contains the exported data from every previous step in the workflow
+
+Return any value from `run` to export it as step data:
+
+```javascript
+async run({ $, steps }) {
+  const prevData = steps.trigger.event.body;
+
+  const result = await doSomething(prevData);
+
+  $.export("$summary", `Processed ${result.count} items`);
+
+  return result; // exported as steps.<step-name>.$return_value
+},
+```
+
+`$.export(key, value)` exports named data from the step. The special key `$summary` sets the human-readable label shown in the workflow editor.
+
+## Hooks
+
+Sources support three lifecycle hooks defined on the `hooks` object:
+
+| Hook | When it runs |
+|---|---|
+| `deploy` | Once, the first time a source is deployed. Use to emit up to 50 historical events. |
+| `activate` | Every time a source is enabled or first created. Use to register webhooks. |
+| `deactivate` | Every time a source is disabled or deleted. Use to remove webhooks. |
+
+```javascript
+hooks: {
+  async deploy() {
+    // Emit the 5 most recent items so the workflow has data to work with immediately
+    const items = await this.getItems({ limit: 5 });
+    for (const item of items) {
+      this.$emit(item, { id: item.id, summary: item.title });
+    }
+  },
+  async activate() {
+    const { id } = await this.createWebhook({
+      url: this.http.endpoint,
+      events: ["push"],
+    });
+    this.db.set("webhookId", id);
+  },
+  async deactivate() {
+    const webhookId = this.db.get("webhookId");
+    await this.deleteWebhook({ webhookId });
+  },
+},
+```
+
+All hooks have access to `this`, including props like `this.db`, `this.http`, and app methods.
+
+## Methods
+
+Define reusable helpers in `methods`. They are available via `this` everywhere in the component:
+
+```javascript
+methods: {
+  async getCommits({ repoFullname, since, sha }) {
+    return this.github.getCommits({ repoFullname, sha, since });
+  },
+  buildSummary(commit) {
+    return `New commit: ${commit.message}`;
+  },
+},
+async run() {
+  const commits = await this.getCommits({ repoFullname: this.repoFullname });
+  commits.forEach((commit) => {
+    this.$emit(commit, { summary: this.buildSummary(commit) });
+  });
+},
+```
+
+Methods defined on an app component are also available on `this` when the app prop is in scope — this is the standard pattern for sharing API call logic across multiple components.
+
+## Dedupe
+
+Sources can prevent duplicate event emissions by setting the `dedupe` field:
+
+| Strategy | Behavior |
+|---|---|
+| `"unique"` | Emit an event with a given `id` only once, ever. |
+| `"greatest"` | Only emit if the new event's `id` is numerically or lexicographically greater than the last emitted `id`. |
+| `"last"` | Only emit if the new event's `id` is different from the most recently emitted `id`. |
+
+When `dedupe` is set, every `this.$emit()` call must include an `id` in the metadata:
+
+```javascript
+export default {
+  key: "my-deduped-source",
+  version: "0.0.1",
+  type: "source",
+  dedupe: "unique",
+  async run() {
+    const items = await this.fetchItems();
+    for (const item of items) {
+      this.$emit(item, {
+        id: item.id,          // required — string or number
+        summary: item.title,
+        ts: Date.parse(item.created_at),
+      });
+    }
+  },
+};
+```
+
+## `$emit` metadata
+
+The second argument to `this.$emit(event, metadata)` accepts these fields:
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | `string \| number` | Unique event identifier. Required when `dedupe` is set. |
+| `name` | `string` | Optional event name. |
+| `summary` | `string` | Short human-readable description shown in the event list. |
+| `ts` | `number` | Timestamp in milliseconds. Used for ordering events. |
+
+## Annotations (actions only)
+
+Actions can include an `annotations` field to provide hints for MCP (Model Context Protocol) tool integrations:
+
+```javascript
+export default {
+  key: "github-create-issue",
+  version: "0.0.1",
+  type: "action",
+  annotations: {
+    destructiveHint: false,  // does not delete or overwrite data
+    readOnlyHint: false,     // does mutate state
+    openWorldHint: true,     // interacts with external systems
+    idempotentHint: false,   // calling twice may create duplicate issues
+  },
+  // ...
+};
+```

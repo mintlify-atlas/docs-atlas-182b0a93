@@ -1,0 +1,128 @@
+---
+title: "Amazon S3"
+description: "Write event payloads to an Amazon S3 bucket using $send.s3()."
+---
+
+The S3 destination writes data to an Amazon S3 bucket. Each call to `$send.s3()` writes a single object to the specified bucket and prefix.
+
+## Usage
+
+```javascript
+export default defineComponent({
+  async run({ steps, $ }) {
+    $send.s3({
+      bucket: "your-bucket-name",
+      prefix: "events/",
+      payload: steps.trigger.event,
+    })
+  }
+})
+```
+
+The object key is automatically generated as `{prefix}{timestamp}-{uuid}`.
+
+## Parameters
+
+<ParamField body="bucket" type="string" required>
+  The name of the S3 bucket to write to. The bucket must exist and Pipedream must have `s3:PutObject` permission.
+</ParamField>
+
+<ParamField body="prefix" type="string" required>
+  The key prefix for the written object. Use a trailing slash to organize objects into a "folder", for example `"events/2024/"`. Pipedream appends a timestamp and unique ID to generate the final object key.
+</ParamField>
+
+<ParamField body="payload" type="string | object" required>
+  The data to write to S3. Objects are serialized to JSON. Strings are written as-is.
+</ParamField>
+
+## Setting up AWS permissions
+
+Pipedream writes to S3 using its own AWS account. To allow writes to your bucket, add the following bucket policy:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "arn:aws:iam::PIPEDREAM_AWS_ACCOUNT_ID:root"
+      },
+      "Action": "s3:PutObject",
+      "Resource": "arn:aws:s3:::your-bucket-name/*"
+    }
+  ]
+}
+```
+
+<Note>
+  Find the Pipedream AWS account ID and full setup instructions in your Pipedream account under **Settings > Developer**.
+</Note>
+
+## Examples
+
+### Archive all trigger events
+
+```javascript
+export default defineComponent({
+  async run({ steps, $ }) {
+    $send.s3({
+      bucket: "my-event-archive",
+      prefix: "triggers/",
+      payload: steps.trigger.event,
+    })
+  }
+})
+```
+
+### Write processed data with a dynamic prefix
+
+```javascript
+export default defineComponent({
+  async run({ steps, $ }) {
+    const event = steps.trigger.event
+    const date = new Date().toISOString().split('T')[0] // "2024-01-15"
+    const type = event.body?.type ?? "unknown"
+
+    $send.s3({
+      bucket: "processed-events",
+      prefix: `${type}/${date}/`,
+      payload: {
+        receivedAt: new Date().toISOString(),
+        source: event.headers?.host,
+        data: event.body,
+      },
+    })
+  }
+})
+```
+
+### Write multiple payloads to different prefixes
+
+```javascript
+export default defineComponent({
+  async run({ steps, $ }) {
+    const event = steps.trigger.event
+
+    // Archive the raw event
+    $send.s3({
+      bucket: "my-bucket",
+      prefix: "raw/",
+      payload: event,
+    })
+
+    // Also write just the body to a separate prefix
+    $send.s3({
+      bucket: "my-bucket",
+      prefix: "bodies/",
+      payload: event.body,
+    })
+  }
+})
+```
+
+## Delivery behavior
+
+`$send.s3()` is **asynchronous**. Your step completes immediately after the call, and Pipedream queues the write. The object will appear in S3 within a few seconds under normal conditions.
+
+If a write fails (for example, due to a permission error), you will see an error in your workflow's event history but the step itself will not be marked as failed.

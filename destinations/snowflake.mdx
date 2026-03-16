@@ -1,0 +1,165 @@
+---
+title: "Snowflake"
+description: "Insert rows into a Snowflake table using $send.snowflake() and Snowpipe for streaming ingestion."
+---
+
+The Snowflake destination inserts data into a Snowflake table using [Snowpipe](https://docs.snowflake.com/en/user-guide/data-load-snowpipe-intro), Snowflake's continuous data ingestion service. Each call to `$send.snowflake()` queues a row for insertion.
+
+## Usage
+
+```javascript
+export default defineComponent({
+  async run({ steps, $ }) {
+    $send.snowflake({
+      account: "xy12345.us-east-1",
+      username: "pipedream_user",
+      private_key: process.env.SNOWFLAKE_PRIVATE_KEY,
+      database: "ANALYTICS",
+      schema: "PUBLIC",
+      stage_name: "PIPEDREAM_STAGE",
+      pipe_name: "PIPEDREAM_PIPE",
+      user: "pipedream_user",
+      host: "xy12345.us-east-1.snowflakecomputing.com",
+      payload: {
+        event_type: "page_view",
+        user_id: "u_123",
+        timestamp: new Date().toISOString(),
+      },
+    })
+  }
+})
+```
+
+## Parameters
+
+<ParamField body="account" type="string" required>
+  Your Snowflake account identifier, in the format `orgname-accountname` or the legacy `locator.region` format (for example, `xy12345.us-east-1`).
+</ParamField>
+
+<ParamField body="host" type="string" required>
+  The full Snowflake account hostname, for example `xy12345.us-east-1.snowflakecomputing.com`.
+</ParamField>
+
+<ParamField body="user" type="string" required>
+  The Snowflake username to authenticate as. This user must have access to the specified pipe.
+</ParamField>
+
+<ParamField body="username" type="string" required>
+  The Snowflake username. Used alongside `user` in the Snowpipe REST API authentication.
+</ParamField>
+
+<ParamField body="private_key" type="string" required>
+  The RSA private key (PEM format) used to authenticate with Snowpipe. Snowpipe requires key-pair authentication; username/password authentication is not supported.
+</ParamField>
+
+<ParamField body="database" type="string" required>
+  The name of the Snowflake database that contains the target table.
+</ParamField>
+
+<ParamField body="schema" type="string" required>
+  The schema within the database that contains the target table, for example `PUBLIC`.
+</ParamField>
+
+<ParamField body="stage_name" type="string" required>
+  The name of the Snowflake internal stage associated with the pipe. Pipedream stages the data here before Snowpipe loads it into the table.
+</ParamField>
+
+<ParamField body="pipe_name" type="string" required>
+  The name of the Snowpipe pipe that loads data from the stage into the target table.
+</ParamField>
+
+<ParamField body="payload" type="string | object" required>
+  The row data to insert. Objects are serialized to JSON and loaded according to the pipe's `COPY INTO` definition. Ensure the payload structure matches your table's column definitions.
+</ParamField>
+
+## Setting up Snowpipe
+
+<Steps>
+  <Step title="Create a target table">
+    Create the table that will receive your data:
+
+    ```sql
+    CREATE TABLE analytics.public.events (
+      event_type STRING,
+      user_id STRING,
+      timestamp TIMESTAMP_NTZ,
+      raw VARIANT
+    );
+    ```
+  </Step>
+  <Step title="Create an internal stage">
+    Create a stage to hold data files before loading:
+
+    ```sql
+    CREATE STAGE analytics.public.pipedream_stage
+      FILE_FORMAT = (TYPE = 'JSON');
+    ```
+  </Step>
+  <Step title="Create a Snowpipe">
+    Create a pipe that copies from the stage into your table:
+
+    ```sql
+    CREATE PIPE analytics.public.pipedream_pipe
+      AUTO_INGEST = FALSE
+    AS
+    COPY INTO analytics.public.events
+    FROM @analytics.public.pipedream_stage
+    FILE_FORMAT = (TYPE = 'JSON')
+    MATCH_BY_COLUMN_NAME = CASE_INSENSITIVE;
+    ```
+  </Step>
+  <Step title="Generate a key pair">
+    Snowpipe requires key-pair authentication. Generate an RSA key pair and assign the public key to your Snowflake user:
+
+    ```sql
+    ALTER USER pipedream_user SET RSA_PUBLIC_KEY='MIIBIjANBgkq...';
+    ```
+
+    Store the private key as a Pipedream environment variable.
+  </Step>
+  <Step title="Grant pipe access">
+    Grant the necessary privileges to the Snowflake user:
+
+    ```sql
+    GRANT USAGE ON DATABASE analytics TO ROLE pipedream_role;
+    GRANT USAGE ON SCHEMA analytics.public TO ROLE pipedream_role;
+    GRANT INSERT ON TABLE analytics.public.events TO ROLE pipedream_role;
+    GRANT OPERATE ON PIPE analytics.public.pipedream_pipe TO ROLE pipedream_role;
+    ```
+  </Step>
+</Steps>
+
+## Example
+
+### Log HTTP events to Snowflake
+
+```javascript
+export default defineComponent({
+  async run({ steps, $ }) {
+    const event = steps.trigger.event
+
+    $send.snowflake({
+      account: process.env.SNOWFLAKE_ACCOUNT,
+      host: process.env.SNOWFLAKE_HOST,
+      user: process.env.SNOWFLAKE_USER,
+      username: process.env.SNOWFLAKE_USER,
+      private_key: process.env.SNOWFLAKE_PRIVATE_KEY,
+      database: "ANALYTICS",
+      schema: "PUBLIC",
+      stage_name: "PIPEDREAM_STAGE",
+      pipe_name: "PIPEDREAM_PIPE",
+      payload: {
+        event_type: event.body?.type,
+        user_id: event.body?.userId,
+        timestamp: new Date().toISOString(),
+        ip_address: event.headers?.["x-forwarded-for"],
+        raw: JSON.stringify(event.body),
+      },
+    })
+  }
+})
+```
+
+## Delivery behavior
+
+`$send.snowflake()` is **asynchronous**. Your step completes immediately, and Pipedream queues the data for delivery via Snowpipe. Snowpipe typically loads data within 1–2 minutes, though latency may vary based on Snowflake service load.

@@ -1,122 +1,204 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
-  "name": "Mint Starter Kit",
+  "name": "Pipedream",
+  "theme": "sequoia",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#35d38c",
+    "light": "#94eccc",
+    "dark": "#6b6f72"
   },
   "favicon": "/favicon.svg",
+  "logo": {
+    "light": "https://media.brand.dev/dcf7c060-1892-4321-aab1-9f761c2c5d44.png",
+    "dark": "https://media.brand.dev/dcf7c060-1892-4321-aab1-9f761c2c5d44.png"
+  },
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/PipedreamHQ/pipedream"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/PipedreamHQ/pipedream"
+    }
+  },
   "navigation": {
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "Overview",
         "groups": [
           {
-            "group": "Getting started",
+            "group": "Getting Started",
             "pages": [
-              "index",
+              "introduction",
               "quickstart",
-              "development"
+              "key-concepts"
             ]
           },
           {
-            "group": "Customization",
+            "group": "Platform",
             "pages": [
-              "essentials/settings",
-              "essentials/navigation"
-            ]
-          },
-          {
-            "group": "Writing content",
-            "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
-            ]
-          },
-          {
-            "group": "AI tools",
-            "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
+              "platform/workflows",
+              "platform/event-sources",
+              "platform/actions",
+              "platform/custom-code",
+              "platform/destinations"
             ]
           }
         ]
       },
       {
-        "tab": "API reference",
+        "tab": "Building Components",
         "groups": [
           {
-            "group": "API documentation",
+            "group": "Component Development",
             "pages": [
-              "api-reference/introduction"
+              "components/overview",
+              "components/quickstart",
+              "components/component-structure"
             ]
           },
           {
-            "group": "Endpoint examples",
+            "group": "Sources & Triggers",
             "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
+              "components/sources/overview",
+              "components/sources/http",
+              "components/sources/timer",
+              "components/sources/custom"
+            ]
+          },
+          {
+            "group": "Actions",
+            "pages": [
+              "components/actions/overview",
+              "components/actions/creating-actions",
+              "components/actions/props"
+            ]
+          },
+          {
+            "group": "Contributing",
+            "pages": [
+              "components/contributing/guidelines",
+              "components/contributing/publishing"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Pipedream Connect",
+        "groups": [
+          {
+            "group": "Connect Overview",
+            "pages": [
+              "connect/overview",
+              "connect/quickstart"
+            ]
+          },
+          {
+            "group": "SDK",
+            "pages": [
+              "connect/sdk/installation",
+              "connect/sdk/backend-client",
+              "connect/sdk/frontend-client"
+            ]
+          },
+          {
+            "group": "React Integration",
+            "pages": [
+              "connect/react/overview",
+              "connect/react/component-form",
+              "connect/react/customization",
+              "connect/react/hooks"
+            ]
+          },
+          {
+            "group": "MCP Server",
+            "pages": [
+              "connect/mcp/overview",
+              "connect/mcp/setup",
+              "connect/mcp/self-hosting"
+            ]
+          },
+          {
+            "group": "Auth Management",
+            "pages": [
+              "connect/auth/oauth",
+              "connect/auth/external-users",
+              "connect/auth/tokens"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Code & Integrations",
+        "groups": [
+          {
+            "group": "Custom Code",
+            "pages": [
+              "code/nodejs",
+              "code/python",
+              "code/golang",
+              "code/bash"
+            ]
+          },
+          {
+            "group": "Destinations",
+            "pages": [
+              "destinations/overview",
+              "destinations/s3",
+              "destinations/snowflake",
+              "destinations/http",
+              "destinations/email",
+              "destinations/sse"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "REST API",
+            "pages": [
+              "api/overview",
+              "api/authentication",
+              "api/workflows",
+              "api/sources",
+              "api/components"
+            ]
+          },
+          {
+            "group": "Platform SDK",
+            "pages": [
+              "api/platform/overview",
+              "api/platform/axios",
+              "api/platform/utils"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Reference",
+        "groups": [
+          {
+            "group": "Configuration",
+            "pages": [
+              "reference/limits",
+              "reference/pricing",
+              "reference/security"
+            ]
+          },
+          {
+            "group": "Resources",
+            "pages": [
+              "reference/changelog",
+              "reference/support",
+              "reference/contributing"
             ]
           }
         ]
       }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
-  },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
-  },
-  "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
-    }
-  },
-  "contextual": {
-    "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
-  },
-  "footer": {
-    "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
-    }
+    ]
   }
 }

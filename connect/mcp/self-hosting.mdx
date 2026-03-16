@@ -1,0 +1,188 @@
+---
+title: Self-hosting the MCP server
+description: Run Pipedream's open-source MCP server reference implementation locally or in your own infrastructure.
+---
+
+Pipedream publishes a reference implementation of the MCP server that you can run locally or host yourself. Use this when you need a custom deployment, want to embed the server within your application, or need to extend its behavior.
+
+<Warning>
+  The reference implementation is published for self-hosting and experimentation. For production use, the [hosted server at mcp.pipedream.com](/connect/mcp/setup) is the recommended option.
+</Warning>
+
+## Quick start with npx
+
+Run the MCP server directly with npx — no installation required:
+
+```bash
+npx @pipedream/mcp
+```
+
+With environment variables:
+
+```bash
+PIPEDREAM_CLIENT_ID=your_client_id \
+PIPEDREAM_CLIENT_SECRET=your_client_secret \
+PIPEDREAM_PROJECT_ID=proj_abc123 \
+PIPEDREAM_PROJECT_ENVIRONMENT=development \
+npx @pipedream/mcp
+```
+
+## Clone and run from source
+
+<Steps>
+  <Step title="Clone the repository">
+    ```bash
+    git clone https://github.com/PipedreamHQ/pipedream.git
+    cd pipedream/modelcontextprotocol
+    ```
+  </Step>
+  <Step title="Install dependencies">
+    ```bash
+    pnpm install
+    ```
+  </Step>
+  <Step title="Configure environment variables">
+    ```bash
+    cp .env.example .env
+    ```
+
+    Edit `.env` and fill in your credentials:
+
+    ```bash
+    PIPEDREAM_CLIENT_ID=your_client_id
+    PIPEDREAM_CLIENT_SECRET=your_client_secret
+    PIPEDREAM_PROJECT_ID=proj_abc123
+    PIPEDREAM_PROJECT_ENVIRONMENT=development
+    ```
+  </Step>
+  <Step title="Start the server">
+    ```bash
+    # Streamable HTTP transport
+    pnpm dev:http
+    ```
+
+    The server starts on port `3010` by default.
+  </Step>
+</Steps>
+
+## Environment variables
+
+<ParamField body="PIPEDREAM_CLIENT_ID" type="string" required>
+  Your Pipedream OAuth client ID.
+</ParamField>
+
+<ParamField body="PIPEDREAM_CLIENT_SECRET" type="string" required>
+  Your Pipedream OAuth client secret. Keep this secret.
+</ParamField>
+
+<ParamField body="PIPEDREAM_PROJECT_ID" type="string" required>
+  Your Pipedream project ID (e.g. `proj_abc123`).
+</ParamField>
+
+<ParamField body="PIPEDREAM_PROJECT_ENVIRONMENT" type="string" required>
+  The project environment: `development` or `production`.
+</ParamField>
+
+<ParamField body="PD_SDK_DEBUG" type="string">
+  Set to `true` to log all Connect API requests and responses. Sensitive fields are redacted automatically.
+
+  ```bash
+  PD_SDK_DEBUG=true pnpm dev:http
+  ```
+</ParamField>
+
+## Available transports
+
+### Streamable HTTP
+
+The recommended transport for production and custom clients:
+
+```bash
+pnpm dev:http
+```
+
+URL format: `http://localhost:3010/v1/{external_user_id}/{app}`
+
+### SSE (Server-Sent Events)
+
+For legacy clients that require SSE:
+
+URL format: `http://localhost:3010/{external_user_id}/{app}`
+
+### Stdio
+
+For local development and MCP Inspector testing:
+
+```bash
+npx @modelcontextprotocol/inspector bun src/stdio.ts
+```
+
+## Testing with MCP Inspector
+
+<Steps>
+  <Step title="Start the server">
+    ```bash
+    pnpm dev:http
+    ```
+  </Step>
+  <Step title="Launch the inspector">
+    ```bash
+    npx @modelcontextprotocol/inspector
+    ```
+  </Step>
+  <Step title="Connect to your server">
+    Enter `http://localhost:3010/v1/{external_user_id}/{app}` in the URL field and select **Streamable HTTP** as the transport. Click **Connect**.
+  </Step>
+  <Step title="List tools">
+    Click **List Tools** to verify the server returns tools for the app. If you see an empty list, check that the external user has a connected account for the app.
+  </Step>
+</Steps>
+
+## Server modes
+
+### App-specific
+
+```
+/{external_user_id}/{app}
+```
+
+Returns tools for a single app. The `{app}` value is the app's name slug.
+
+### Dynamic
+
+```
+/{external_user_id}
+```
+
+Returns tools for all apps the user has connected. Experimental.
+
+## Using the self-hosted server with Claude Desktop
+
+Point Claude Desktop to your local server instead of the hosted one:
+
+```json
+{
+  "mcpServers": {
+    "pipedream-local": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@pipedream/mcp",
+        "stdio",
+        "user-123",
+        "slack"
+      ],
+      "env": {
+        "PIPEDREAM_CLIENT_ID": "your_client_id",
+        "PIPEDREAM_CLIENT_SECRET": "your_client_secret",
+        "PIPEDREAM_PROJECT_ID": "proj_abc123",
+        "PIPEDREAM_PROJECT_ENVIRONMENT": "development"
+      }
+    }
+  }
+}
+```
+
+## License
+
+The reference implementation is published under the [Pipedream Source Available License Version 1.0](https://github.com/PipedreamHQ/pipedream/blob/master/LICENSE).

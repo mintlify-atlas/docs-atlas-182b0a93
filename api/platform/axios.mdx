@@ -1,0 +1,210 @@
+---
+title: "$.axios"
+description: "Make authenticated HTTP requests inside Pipedream workflow steps using the $.axios helper."
+---
+
+`$.axios` is the recommended way to make HTTP requests inside Pipedream workflow steps. It wraps [axios](https://axios-http.com) with Pipedream-specific behavior: automatic error sanitization, optional debug exports, and OAuth 1.0a request signing.
+
+## Basic usage
+
+```javascript
+export default defineComponent({
+  props: {
+    myApp: {
+      type: "app",
+      app: "my_app",
+    },
+  },
+  async run({ steps, $ }) {
+    // GET request — returns response.data by default
+    const data = await $.axios({
+      url: "https://api.example.com/items",
+      headers: {
+        Authorization: `Bearer ${this.myApp.$auth.oauth_access_token}`,
+      },
+    });
+
+    return data;
+  },
+});
+```
+
+## Function signature
+
+```typescript
+function axios(
+  step: PipedreamStep | undefined,
+  config: AxiosRequestConfig,
+  signConfig?: OAuth1SignConfig
+): Promise<unknown>
+```
+
+<ParamField body="step" type="object">
+  The Pipedream step context object (`$`). Pass `$` from the `run` method to enable step exports for debug output. You may also pass `undefined`.
+</ParamField>
+
+<ParamField body="config" type="AxiosRequestConfig" required>
+  An axios-compatible request configuration object. See the fields below.
+</ParamField>
+
+<ParamField body="signConfig" type="OAuth1SignConfig">
+  Optional OAuth 1.0a signing configuration. When provided, the request is automatically signed with an `Authorization` header.
+  <Expandable title="OAuth1SignConfig fields">
+    <ParamField body="oauthSignerUri" type="string" required>
+      The URI of the Pipedream OAuth 1.0a signer service.
+    </ParamField>
+    <ParamField body="token" type="object" required>
+      The OAuth 1.0a token object used to sign the request.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+## Request config fields
+
+`$.axios` accepts a standard axios `AxiosRequestConfig` object plus the following Pipedream extensions:
+
+<ParamField body="url" type="string" required>
+  The request URL. Query parameters included in the URL are automatically moved to `config.params`.
+</ParamField>
+
+<ParamField body="method" type="string">
+  HTTP method: `GET`, `POST`, `PUT`, `DELETE`, `PATCH`, `HEAD`, `OPTIONS`, `CONNECT`, `TRACE`. Defaults to `GET`.
+</ParamField>
+
+<ParamField body="headers" type="object">
+  HTTP headers to include. Keys with `undefined` values are removed before the request is sent.
+</ParamField>
+
+<ParamField body="params" type="object">
+  Query parameters. Keys with `undefined` values are removed automatically. Parameters found in the URL are merged here.
+</ParamField>
+
+<ParamField body="data" type="string | object">
+  Request body. Use `data`, not `body` — passing `body` throws a `ConfigurationError`.
+</ParamField>
+
+<ParamField body="debug" type="boolean">
+  When `true`, exports the request config as `debug_config` and the response data as `debug_response` to the step. Useful for troubleshooting.
+</ParamField>
+
+<ParamField body="returnFullResponse" type="boolean">
+  When `true`, returns the full axios response object (including `status`, `headers`, and `data`) instead of just `response.data`.
+</ParamField>
+
+## Return value
+
+By default, `$.axios` returns `response.data` — the parsed response body.
+
+Set `returnFullResponse: true` to receive the full axios response:
+
+```javascript
+const response = await $.axios({
+  url: "https://api.example.com/data",
+  returnFullResponse: true,
+});
+
+console.log(response.status);   // e.g. 200
+console.log(response.headers);  // response headers
+console.log(response.data);     // parsed body
+```
+
+## Error handling
+
+When an HTTP error response is received, `$.axios` throws an axios `AxiosError`. Before throwing, it:
+
+1. Sanitizes the error object — removes `config`, `request`, and `stack` to avoid leaking sensitive data in logs.
+2. Sets `err.message` to the JSON-stringified response body for easier debugging.
+3. Exports a `debug` object to the step (when a step context is passed) containing `status`, `statusText`, `headers`, and `data`.
+
+```javascript
+try {
+  await $.axios({
+    url: "https://api.example.com/protected",
+    headers: { Authorization: "Bearer bad-token" },
+  });
+} catch (err) {
+  console.log(err.message); // JSON of the error response body
+}
+```
+
+## Creating reusable instances
+
+Use `$.axios.create()` to create a preconfigured axios instance — useful when making multiple requests to the same API.
+
+```javascript
+const api = $.axios.create({
+  baseURL: "https://api.example.com",
+  headers: {
+    Authorization: `Bearer ${this.myApp.$auth.oauth_access_token}`,
+    "Content-Type": "application/json",
+  },
+});
+
+// All requests inherit the base config
+const items = await api.get("/items");
+const item = await api.post("/items", { name: "new item" });
+```
+
+`$.axios.create()` accepts the same `AxiosRequestConfig` and optional `OAuth1SignConfig` as the base function.
+
+## OAuth 1.0a
+
+For APIs that require OAuth 1.0a signatures, pass a `signConfig` object:
+
+```javascript
+const data = await $.axios(
+  $,
+  {
+    method: "POST",
+    url: "https://api.example.com/resource",
+    data: { key: "value" },
+  },
+  {
+    oauthSignerUri: this.myApp.$auth.oauth_signer_uri,
+    token: this.myApp.$auth.oauth_access_token,
+  },
+);
+```
+
+The helper calls `transformConfigForOauth` internally to serialize the request data according to the OAuth 1.0a specification before signing.
+
+## Common patterns
+
+<CodeGroup>
+
+```javascript GET with query params
+const results = await $.axios({
+  url: "https://api.example.com/search",
+  params: {
+    q: "pipedream",
+    page: 1,
+  },
+  headers: {
+    Authorization: `Bearer ${this.app.$auth.oauth_access_token}`,
+  },
+});
+```
+
+```javascript POST with JSON body
+const created = await $.axios({
+  method: "POST",
+  url: "https://api.example.com/items",
+  headers: {
+    Authorization: `Bearer ${this.app.$auth.oauth_access_token}`,
+    "Content-Type": "application/json",
+  },
+  data: {
+    name: "New Item",
+    value: 42,
+  },
+});
+```
+
+```javascript Debug mode
+const response = await $.axios({
+  url: "https://api.example.com/data",
+  debug: true, // exports debug_config and debug_response to the step
+});
+```
+
+</CodeGroup>

@@ -1,0 +1,437 @@
+---
+title: Props reference
+description: Complete reference for every Pipedream prop type — string, integer, boolean, object, app, timer, HTTP, database, and more.
+---
+
+Props are typed input fields on a component. They appear as form controls in the Pipedream UI and are accessible inside `run` and `methods` via `this.<propName>`.
+
+## Common prop fields
+
+All props (except shorthand strings) share these base fields:
+
+<ParamField path="label" type="string">
+  Human-readable label shown above the input in the UI. If omitted, Pipedream generates a label from the prop key.
+</ParamField>
+
+<ParamField path="description" type="string">
+  Supporting text shown below the label. Supports Markdown. Use it to explain format requirements, provide examples, or link to API docs.
+</ParamField>
+
+<ParamField path="optional" type="boolean" default="false">
+  When `true`, the user is not required to fill in the prop before saving the component. The value will be `undefined` if left blank.
+</ParamField>
+
+<ParamField path="default" type="any">
+  The default value shown in the UI. Must match the prop's type.
+</ParamField>
+
+<ParamField path="disabled" type="boolean" default="false">
+  When `true`, the prop is read-only in the UI. Useful in combination with `additionalProps` to lock a field after it has been set.
+</ParamField>
+
+<ParamField path="hidden" type="boolean" default="false">
+  When `true`, the prop is not shown in the UI. The `default` value is used.
+</ParamField>
+
+<ParamField path="reloadProps" type="boolean" default="false">
+  When `true`, changing this prop's value triggers a re-evaluation of `additionalProps`.
+</ParamField>
+
+---
+
+## User input props
+
+### `string`
+
+<ParamField path="type" type="string" required>
+  `"string"`
+</ParamField>
+
+<ParamField path="options" type="array | function">
+  Provide a static list of options or an async function that returns options. Options can be plain strings or `{ label, value }` objects.
+</ParamField>
+
+<ParamField path="secret" type="boolean" default="false">
+  When `true`, the value is masked in the UI (like a password field) and redacted from logs.
+</ParamField>
+
+```javascript
+// Static options
+channel: {
+  type: "string",
+  label: "Channel",
+  description: "The Slack channel to post to.",
+  options: ["#general", "#engineering", "#random"],
+},
+
+// Dynamic async options
+repo: {
+  type: "string",
+  label: "Repository",
+  async options() {
+    const repos = await this.github.getRepos();
+    return repos.map((r) => ({
+      label: r.full_name,
+      value: r.full_name,
+    }));
+  },
+},
+
+// Secret field
+apiKey: {
+  type: "string",
+  label: "API Key",
+  secret: true,
+},
+```
+
+### `string[]`
+
+A multi-value string prop. Renders as a multi-select or tag input in the UI.
+
+```javascript
+labels: {
+  type: "string[]",
+  label: "Labels",
+  description: "One or more labels to apply to the issue.",
+  optional: true,
+  options: ["bug", "enhancement", "documentation"],
+},
+```
+
+### `integer`
+
+<ParamField path="min" type="number">
+  Minimum allowed value.
+</ParamField>
+
+<ParamField path="max" type="number">
+  Maximum allowed value.
+</ParamField>
+
+```javascript
+retryCount: {
+  type: "integer",
+  label: "Retry Count",
+  description: "Number of times to retry on failure.",
+  min: 0,
+  max: 10,
+  default: 3,
+},
+```
+
+### `integer[]`
+
+A multi-value integer prop.
+
+```javascript
+portNumbers: {
+  type: "integer[]",
+  label: "Port Numbers",
+  optional: true,
+},
+```
+
+### `boolean`
+
+Renders as a checkbox or toggle in the UI.
+
+```javascript
+sendNotification: {
+  type: "boolean",
+  label: "Send Notification",
+  description: "Send an email notification after completing the action.",
+  default: false,
+},
+```
+
+### `boolean[]`
+
+A multi-value boolean prop (rare in practice).
+
+### `object`
+
+Renders as a key-value editor in the UI. The value is a plain JavaScript object.
+
+```javascript
+customHeaders: {
+  type: "object",
+  label: "Custom Headers",
+  description: "Additional HTTP headers to include in the request.",
+  optional: true,
+},
+```
+
+### `any`
+
+Accepts any JSON value. Use when the type is genuinely unknown or variable.
+
+```javascript
+payload: {
+  type: "any",
+  label: "Payload",
+  description: "The data to send. Accepts any JSON value.",
+},
+```
+
+---
+
+## Interface props
+
+### `$.interface.http`
+
+Exposes a unique HTTP endpoint URL for the component. **Sources only.**
+
+Shorthand (no custom response):
+
+```javascript
+http: "$.interface.http",
+```
+
+Full form with custom response:
+
+```javascript
+http: {
+  type: "$.interface.http",
+  customResponse: true, // lets you call this.http.respond() from run
+},
+```
+
+At runtime, `this.http.endpoint` contains the URL, e.g. `https://en123abc.m.pipedream.net`.
+
+When `customResponse: true`, call `this.http.respond({ status, body, headers })` from `run` to control the HTTP response returned to the caller.
+
+### `$.interface.timer`
+
+Schedules the source to run on a timer. **Sources only.**
+
+```javascript
+timer: {
+  type: "$.interface.timer",
+  default: {
+    intervalSeconds: 900,  // run every 15 minutes
+  },
+},
+```
+
+Or with a cron expression:
+
+```javascript
+timer: {
+  type: "$.interface.timer",
+  default: {
+    cron: "0 9 * * 1-5",  // 9am Monday–Friday UTC
+  },
+},
+```
+
+The `default` value is the schedule used when the source is first deployed. Users can override it in the UI.
+
+---
+
+## Service props
+
+### `$.service.db`
+
+A persistent key-value store scoped to the source instance. **Sources only.**
+
+Shorthand:
+
+```javascript
+db: "$.service.db",
+```
+
+Usage:
+
+```javascript
+// Read a value (returns undefined if not set)
+const lastId = this.db.get("lastId");
+
+// Write a value
+this.db.set("lastId", 42);
+```
+
+Values persist across source invocations. The store is private to the source instance — not shared between different sources or workflows.
+
+### `data_store`
+
+A Pipedream [Data Store](https://pipedream.com/docs/data-stores/), a managed key-value database accessible from any workflow. **Actions only.**
+
+```javascript
+dataStore: {
+  type: "data_store",
+  label: "Data Store",
+  description: "The data store to read from and write to.",
+},
+```
+
+Usage:
+
+```javascript
+// Read
+const value = await this.dataStore.get("my-key");
+
+// Write
+await this.dataStore.set("my-key", { count: 1 });
+```
+
+---
+
+## App props
+
+App props connect a Pipedream-integrated OAuth or API key app to the component.
+
+```javascript
+github: {
+  type: "app",
+  app: "github",
+},
+```
+
+The `app` value must match the Pipedream app slug (visible in the app's URL on pipedream.com). At runtime:
+
+- `this.github.$auth` contains the connected account's credentials.
+- `this.github.*` provides access to any methods defined on the app component.
+
+### Accessing OAuth tokens
+
+```javascript
+// OAuth app
+const token = this.github.$auth.oauth_access_token;
+
+// API key app
+const apiKey = this.myapp.$auth.api_key;
+```
+
+The specific fields on `$auth` depend on the app's authentication type. Check the app component file or the Pipedream app page for the available fields.
+
+### Using `propDefinitions`
+
+App components define `propDefinitions` — named, reusable prop configurations. Reference them with a tuple:
+
+```javascript
+// Three-element form: pass additional options to filter async options
+branch: {
+  propDefinition: [
+    github,
+    "branch",
+    (c) => ({ repoFullname: c.repoFullname }),
+  ],
+},
+```
+
+The third element is a function that receives the current prop values (`c`) and returns additional options passed to the prop definition's `options` function.
+
+---
+
+## Async options
+
+Any user input prop can use an async `options` function to populate a dropdown from an API:
+
+```javascript
+project: {
+  type: "integer",
+  label: "Project",
+  async options({ prevContext }) {
+    // prevContext enables cursor-based pagination
+    const cursor = prevContext?.cursor ?? null;
+
+    const { projects, nextCursor } = await this.getProjects({ cursor });
+
+    return {
+      options: projects.map((p) => ({
+        label: p.name,
+        value: p.id,
+      })),
+      context: {
+        cursor: nextCursor,
+      },
+    };
+  },
+},
+```
+
+The `options` function receives an `OptionsMethodArgs` object:
+
+<ParamField path="page" type="number">
+  The current page number for offset-based pagination. Starts at `0`.
+</ParamField>
+
+<ParamField path="prevContext" type="any">
+  The `context` object returned by the previous call to `options`. Use for cursor-based pagination.
+</ParamField>
+
+Return either:
+- A plain array of strings or `{ label, value }` objects for single-page results.
+- An object `{ options, context }` for paginated results where `context` is passed back as `prevContext` on the next call.
+
+---
+
+## Alert props
+
+Display an informational, warning, or error banner in the UI. Not an input — no value is passed to `run`.
+
+```javascript
+infoBox: {
+  type: "alert",
+  alertType: "info",  // "info" | "warning" | "error"
+  content: "Labels and assignees require push access to the repository.",
+},
+```
+
+---
+
+## HTTP request prop
+
+Renders a full HTTP request configuration UI (method, URL, headers, body, auth). Useful for generic HTTP action components.
+
+```javascript
+httpRequest: {
+  type: "http_request",
+  label: "HTTP Request Configuration",
+  default: {
+    method: "POST",
+    url: "https://api.example.com/events",
+  },
+},
+```
+
+---
+
+## Prop definitions example
+
+Here is how the GitHub app component defines `repoFullname`, and how a consuming action references it:
+
+```javascript
+// github.app.mjs
+export default {
+  type: "app",
+  app: "github",
+  propDefinitions: {
+    repoFullname: {
+      label: "Repository",
+      description: "The name of the repository. Format: `owner/repo`.",
+      type: "string",
+      async options({ org }) {
+        const repositories = await this.getRepos({ org });
+        return repositories.map((r) => r.full_name);
+      },
+    },
+  },
+};
+
+// create-issue.mjs
+import github from "../../github.app.mjs";
+
+export default {
+  key: "github-create-issue",
+  version: "0.0.1",
+  type: "action",
+  props: {
+    github,
+    repoFullname: {
+      propDefinition: [github, "repoFullname"],
+    },
+  },
+};
+```

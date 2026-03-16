@@ -1,0 +1,165 @@
+---
+title: Connect tokens
+description: Understand how Connect tokens work, how to create them on your server, and how to use them securely in your frontend.
+---
+
+A Connect token is a short-lived, scoped credential that authorizes a browser or client to call the Pipedream Connect API on behalf of one of your external users. Your server creates the token; your frontend uses it.
+
+## How tokens work
+
+<Steps>
+  <Step title="Your server creates a token">
+    The backend client calls `createConnectToken` with the external user's ID. Pipedream returns a token string and an expiration time.
+  </Step>
+  <Step title="Your server sends the token to your frontend">
+    Return the token in an API response or pass it through a server action. The frontend receives it and passes it to the frontend SDK client.
+  </Step>
+  <Step title="The frontend uses the token">
+    The `BrowserClient` caches the token and includes it as a `Bearer` header in all Connect API requests. The `tokenCallback` is called automatically when the cached token expires.
+  </Step>
+  <Step title="The token expires">
+    Tokens are short-lived. After expiry (or after being used to connect an account), the frontend SDK calls your `tokenCallback` to get a fresh token.
+  </Step>
+</Steps>
+
+## Creating a Connect token
+
+```typescript
+import { createBackendClient } from "@pipedream/sdk/server";
+
+const client = createBackendClient({
+  environment: "production",
+  projectId: process.env.PIPEDREAM_PROJECT_ID!,
+  credentials: {
+    clientId: process.env.PIPEDREAM_CLIENT_ID!,
+    clientSecret: process.env.PIPEDREAM_CLIENT_SECRET!,
+  },
+});
+
+const { token, expires_at, connect_link_url } = await client.createConnectToken({
+  external_user_id: "user-123",
+  allowed_origins: ["https://yourapp.com"],
+});
+```
+
+## Token options
+
+<ParamField body="external_user_id" type="string" required>
+  Your user's ID. The token is scoped to this user — all API calls made with it are attributed to this external user.
+</ParamField>
+
+<ParamField body="allowed_origins" type="string[]">
+  Browser origins that are permitted to use this token. Requests from origins not in this list will be rejected by the Pipedream API.
+
+  ```typescript
+  allowed_origins: ["https://yourapp.com", "http://localhost:3000"]
+  ```
+
+  Leaving this empty removes the origin restriction, which is not recommended for production.
+</ParamField>
+
+<ParamField body="success_redirect_uri" type="string">
+  URL to redirect the user to after they successfully connect an account. Useful when embedding Pipedream Connect in a redirect-based flow rather than an iframe.
+</ParamField>
+
+<ParamField body="error_redirect_uri" type="string">
+  URL to redirect the user to if the account connection fails.
+</ParamField>
+
+<ParamField body="webhook_uri" type="string">
+  A webhook URL that Pipedream will call on connection success or failure. Useful for server-side workflows that respond to account connections.
+
+  The webhook receives a POST request with a JSON body containing the connection result.
+</ParamField>
+
+## Token response
+
+<ResponseField name="token" type="string">
+  The Connect token string. Pass this to the frontend SDK's `tokenCallback` return value, or include it in your API response.
+</ResponseField>
+
+<ResponseField name="expires_at" type="string">
+  ISO 8601 timestamp indicating when the token expires. The frontend SDK uses this to determine when to call `tokenCallback` for a new token.
+</ResponseField>
+
+<ResponseField name="connect_link_url" type="string">
+  A hosted Connect Link URL. Share this URL directly with users to connect accounts without embedding the SDK in your frontend. The URL expires at the same time as the token.
+</ResponseField>
+
+## Implementing `tokenCallback`
+
+The `tokenCallback` is an async function you provide to the frontend SDK client. It must return the response object from `createConnectToken` (i.e. `{ token, expires_at }`). The SDK calls it automatically when needed.
+
+```typescript
+const client = createFrontendClient({
+  externalUserId: "user-123",
+  tokenCallback: async ({ externalUserId }) => {
+    const response = await fetch("/api/connect-token", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ externalUserId }),
+    });
+    return response.json(); // must return { token, expires_at }
+  },
+});
+```
+
+### Next.js server action
+
+```typescript
+// app/actions.ts
+"use server";
+import { createBackendClient } from "@pipedream/sdk/server";
+
+const serverClient = createBackendClient({
+  environment: process.env.NODE_ENV === "production" ? "production" : "development",
+  projectId: process.env.PIPEDREAM_PROJECT_ID!,
+  credentials: {
+    clientId: process.env.PIPEDREAM_CLIENT_ID!,
+    clientSecret: process.env.PIPEDREAM_CLIENT_SECRET!,
+  },
+});
+
+export async function fetchToken({ externalUserId }: { externalUserId: string }) {
+  return await serverClient.createConnectToken({
+    external_user_id: externalUserId,
+    allowed_origins: JSON.parse(process.env.PIPEDREAM_ALLOWED_ORIGINS || "[]"),
+  });
+}
+```
+
+### Express route
+
+```typescript
+app.post("/api/connect-token", requireAuth, async (req, res) => {
+  const userId = req.user.id; // from your auth middleware
+
+  const tokenResponse = await serverClient.createConnectToken({
+    external_user_id: userId,
+    allowed_origins: [process.env.APP_ORIGIN!],
+  });
+
+  res.json(tokenResponse);
+});
+```
+
+## Security considerations
+
+- **Keep token creation on the server.** The `createConnectToken` call requires your OAuth client secret. Never call it from the browser.
+- **Use `allowed_origins` in production.** Restricting origins prevents tokens from being used on unauthorized domains.
+- **Validate the requesting user.** Before creating a token, verify that the request is authenticated and the `external_user_id` matches the authenticated user in your own system. Never allow one user to create tokens for another.
+- **Tokens are single-use for connections.** After a token is used to connect an account, the SDK marks it as expired and calls `tokenCallback` for a new one. Do not cache tokens on the frontend across page loads.
+
+## Connect Link
+
+The `connect_link_url` in the token response is a hosted URL you can share with users — via email, chat, or a button — without embedding any SDK in your frontend. The user opens the URL, completes the OAuth flow, and is redirected to the `success_redirect_uri` if configured.
+
+```typescript
+const { connect_link_url } = await client.createConnectToken({
+  external_user_id: "user-123",
+  success_redirect_uri: "https://yourapp.com/settings?connected=true",
+});
+
+// Email the link to the user
+await sendEmail(user.email, `Connect your account: ${connect_link_url}`);
+```

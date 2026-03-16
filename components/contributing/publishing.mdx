@@ -1,0 +1,184 @@
+---
+title: Publishing components
+description: Publish event sources and actions to Pipedream's public registry using the CLI and GitHub pull requests.
+---
+
+You can publish components in two ways: to your **private account** for personal use, or to the **Pipedream public registry** so anyone can use them. This page covers both paths.
+
+## Publishing to your account
+
+Use the Pipedream CLI to deploy or publish components directly to your account without going through GitHub.
+
+### Deploy a source
+
+`pd deploy` creates a live source instance from a local file:
+
+```bash
+pd deploy my-timer-source.mjs
+```
+
+The source is created immediately and begins emitting events. Use `pd sources` to list running sources and `pd delete --source <id>` to remove one.
+
+### Publish an action
+
+`pd publish` makes a component available in your workflow step library without creating a running instance:
+
+```bash
+pd publish create-github-issue.mjs
+```
+
+The action appears in any workflow under **My Actions**.
+
+### Updating a published component
+
+Bump the `version` field in your file, then re-run `pd publish`:
+
+```bash
+# Update version in the file from 0.0.1 to 0.0.2, then:
+pd publish create-github-issue.mjs
+```
+
+Existing workflow steps pinned to the old version continue to use it. Users can upgrade individual steps to the new version from the workflow editor.
+
+<Warning>
+Never publish a change without bumping the version number. Publishing a new version of a component with the same version number can break workflows that depend on it.
+</Warning>
+
+## Publishing to the public registry
+
+Public registry components are available to every Pipedream user. They live in the [PipedreamHQ/pipedream](https://github.com/PipedreamHQ/pipedream) GitHub repository under `components/<app-slug>/`.
+
+### Prerequisites
+
+- A GitHub account
+- [Git](https://git-scm.com/) installed
+- [Node.js](https://nodejs.org/) 18+ and [pnpm](https://pnpm.io/) installed
+- The [Pipedream CLI](https://pipedream.com/docs/cli/reference/) installed and authenticated
+
+### Directory structure
+
+All components for an app live under `components/<app-slug>/`:
+
+```
+components/
+└── github/
+    ├── github.app.mjs          # App component with propDefinitions and methods
+    ├── package.json
+    ├── actions/
+    │   └── create-issue/
+    │       └── create-issue.mjs
+    └── sources/
+        └── new-commit/
+            └── new-commit.mjs
+```
+
+For a new app integration, create the app directory and the app component file first.
+
+### Step-by-step
+
+<Steps>
+  <Step title="Fork the repository">
+    Fork [PipedreamHQ/pipedream](https://github.com/PipedreamHQ/pipedream) on GitHub, then clone your fork:
+
+    ```bash
+    git clone https://github.com/<your-username>/pipedream.git
+    cd pipedream
+    ```
+  </Step>
+
+  <Step title="Install dependencies">
+    ```bash
+    pnpm install
+    ```
+  </Step>
+
+  <Step title="Set up the CLI with your API key">
+    ```bash
+    pd login
+    ```
+
+    Or set the `PD_API_KEY` environment variable for use in Gitpod:
+
+    ```bash
+    export PD_API_KEY=your_api_key_here
+    ```
+  </Step>
+
+  <Step title="Create a branch">
+    ```bash
+    git checkout -b feat/github-create-branch
+    ```
+  </Step>
+
+  <Step title="Write the component">
+    Add your component file(s) under `components/<app-slug>/`. Follow the [contributing guidelines](/components/contributing/guidelines) for naming, structure, and code style.
+
+    For a new action:
+    ```bash
+    mkdir -p components/github/actions/create-branch
+    # create components/github/actions/create-branch/create-branch.mjs
+    ```
+  </Step>
+
+  <Step title="Test your component">
+    Deploy to your account and test in a real workflow:
+
+    ```bash
+    pd publish components/github/actions/create-branch/create-branch.mjs
+    ```
+
+    Verify the component works end-to-end: props render correctly, API calls succeed, and `$summary` is set.
+  </Step>
+
+  <Step title="Run the linter">
+    ```bash
+    pnpm lint
+    ```
+
+    Fix all lint errors before committing.
+  </Step>
+
+  <Step title="Commit and push">
+    ```bash
+    git add .
+    git commit -m "feat(github): add create-branch action"
+    git push origin feat/github-create-branch
+    ```
+  </Step>
+
+  <Step title="Open a pull request">
+    Open a PR from your branch to `PipedreamHQ/pipedream:master`. Include:
+    - A description of what the component does
+    - A link to the upstream API documentation
+    - Any notes about edge cases or limitations
+
+    A Pipedream team member is automatically assigned to review the PR.
+  </Step>
+</Steps>
+
+### Using Gitpod
+
+You can develop components in the browser without installing anything locally:
+
+1. Fork the repository on GitHub.
+2. Add your Pipedream API key to your [Gitpod Variables](https://gitpod.io/variables) as `PD_API_KEY`.
+3. Open your fork in Gitpod: `https://gitpod.io/#https://github.com/<your-username>/pipedream`.
+
+The workspace automatically configures the CLI with your API key.
+
+### What happens after merge
+
+When a PR is merged to `master`, the Pipedream team promotes the component to the public registry. It becomes available in the Pipedream UI for all users. The timeline for promotion varies — check the PR for status updates.
+
+## Component versioning in the registry
+
+Once a component is in the registry, Pipedream maintains backward compatibility:
+
+- Workflows pin to the version of a component they were configured with.
+- Updating a component in the registry requires bumping its `version` field.
+- Users see an upgrade prompt in the workflow editor when a new version is available.
+- Breaking changes (removed props, changed behavior) must increment the major version.
+
+## Requesting a new app integration
+
+If the app you want to integrate is not yet in Pipedream's registry, [request it on GitHub](https://github.com/PipedreamHQ/pipedream/issues/new?assignees=&labels=app%2C+enhancement&template=app---service-integration.md&title=[APP]). Include the app name, a link to its API docs, and your use case.

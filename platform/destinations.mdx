@@ -1,0 +1,222 @@
+---
+title: "Destinations"
+description: "Deliver event data asynchronously to Amazon S3, Snowflake, HTTP endpoints, email, and SSE streams."
+---
+
+Destinations let you send event data to external targets without blocking workflow execution. Unlike synchronous step returns, destination calls are fire-and-forget — Pipedream batches and delivers the data in the background after the workflow completes.
+
+## Available destinations
+
+<CardGroup cols={2}>
+  <Card title="Amazon S3" icon="database">
+    Write event payloads to an S3 bucket with a configurable prefix. Pipedream batches writes for efficiency.
+  </Card>
+  <Card title="Snowflake" icon="snowflake">
+    Stream event data into a Snowflake table using Snowflake's Snowpipe. Useful for analytics and data warehousing.
+  </Card>
+  <Card title="HTTP" icon="globe">
+    Forward event payloads via HTTP POST to any URL. Supports custom headers and authentication.
+  </Card>
+  <Card title="Email" icon="envelope">
+    Send event data as an email. Supports plain text, HTML, and custom subjects.
+  </Card>
+  <Card title="SSE" icon="signal">
+    Publish events to a named Server-Sent Events channel. Subscribers can consume the stream in real time.
+  </Card>
+</CardGroup>
+
+## Amazon S3
+
+Send payloads to an S3 bucket. Pipedream uses the prefix to organize objects by date or any custom path structure.
+
+```javascript
+$send.s3({
+  bucket: "your-bucket-here",
+  prefix: "your-prefix/",
+  payload: event.body,
+});
+```
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `bucket` | string | The name of the S3 bucket |
+| `prefix` | string | Key prefix for the stored object (e.g., `events/2024/`) |
+| `payload` | string \| object | The data to store. Objects are JSON-serialized automatically. |
+
+<Note>
+You must [connect your AWS account](https://pipedream.com/accounts) and grant Pipedream write access to the target bucket. See the [S3 destination docs](https://docs.pipedream.com/destinations/s3/) for the required IAM policy.
+</Note>
+
+## Snowflake
+
+Stream data into a Snowflake table via Snowpipe. Pipedream handles the staging and ingestion pipeline.
+
+```javascript
+$send.snowflake({
+  account: "xy12345.us-east-1",
+  host: "xy12345.us-east-1.snowflakecomputing.com",
+  user: "pipedream_user",
+  private_key: process.env.SNOWFLAKE_PRIVATE_KEY,
+  database: "ANALYTICS",
+  schema: "PUBLIC",
+  stage_name: "PIPEDREAM_STAGE",
+  pipe_name: "PIPEDREAM_PIPE",
+  payload: event.body,
+});
+```
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `account` | string | Snowflake account identifier |
+| `host` | string | Snowflake hostname |
+| `user` | string | Snowflake username |
+| `private_key` | string | RSA private key for key-pair authentication |
+| `database` | string | Target database name |
+| `schema` | string | Target schema name |
+| `stage_name` | string | Internal stage name |
+| `pipe_name` | string | Snowpipe pipe name |
+| `payload` | string \| object | Event data to ingest |
+
+## HTTP
+
+Forward event data via HTTP POST to any URL. Useful for webhooks, logging services, and custom API endpoints.
+
+```javascript
+$send.http({
+  method: "POST",
+  url: "https://your-endpoint.example.com/events",
+  data: {
+    source: "pipedream",
+    event: steps.trigger.event,
+  },
+  headers: {
+    "Authorization": `Bearer ${process.env.WEBHOOK_SECRET}`,
+    "Content-Type": "application/json",
+  },
+});
+```
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `method` | string | HTTP method: `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, etc. |
+| `url` | string | Target URL |
+| `data` | string \| object | Request body |
+| `headers` | object | Key-value request headers |
+| `params` | object | URL query parameters |
+| `auth` | object | Basic auth with `{ username, password }` |
+
+## Email
+
+Send event data as an email. The email is sent from Pipedream's servers to the address associated with your Pipedream account by default, or a custom recipient.
+
+```javascript
+$send.email({
+  subject: "New event from my workflow",
+  text: `Received event at ${new Date().toISOString()}`,
+  html: `<p>Received event at <strong>${new Date().toISOString()}</strong></p>`,
+});
+```
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `subject` | string | Email subject line |
+| `text` | string | Plain-text body |
+| `html` | string | HTML body (rendered if the recipient's email client supports it) |
+
+<Tip>
+Include both `text` and `html` to ensure the email renders correctly in all email clients.
+</Tip>
+
+## SSE (Server-Sent Events)
+
+Publish events to a named SSE channel. Any HTTP client subscribed to the channel's SSE endpoint receives the event in real time.
+
+```javascript
+$send.sse({
+  channel: "my-events",
+  payload: {
+    type: "new_order",
+    orderId: steps.trigger.event.body.id,
+  },
+});
+```
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `channel` | string | Channel name. Subscribers listen on `/sse/{channel}`. |
+| `payload` | string \| object | Event data to publish |
+
+Subscribers connect to the SSE stream with:
+
+```javascript
+const source = new EventSource(
+  "https://sdk.m.pipedream.net/pipelines/{sourceId}/sse"
+);
+
+source.addEventListener("message", (event) => {
+  const data = JSON.parse(event.data);
+  console.log(data);
+});
+```
+
+## Synchronous vs. asynchronous delivery
+
+| | Step return value | Destination (`$send.*`) |
+|--|-------------------|-------------------------|
+| **Timing** | Available immediately | Delivered after workflow completes |
+| **Blocking** | Yes — workflow waits | No — fire and forget |
+| **Use case** | Pass data to next step | Forward data to external service |
+| **Retry on failure** | No | Yes — Pipedream retries delivery |
+
+Use destinations when you want to deliver data to an external target without adding latency to the workflow, or when you don't need the delivery result in a downstream step.
+
+## Using multiple destinations
+
+You can call multiple `$send.*` functions in a single step:
+
+```javascript
+export default defineComponent({
+  async run({ steps, $ }) {
+    const payload = steps.trigger.event.body;
+
+    // Archive to S3
+    $send.s3({
+      bucket: "my-archive-bucket",
+      prefix: "raw-events/",
+      payload,
+    });
+
+    // Forward to a webhook
+    $send.http({
+      method: "POST",
+      url: process.env.WEBHOOK_URL,
+      data: payload,
+    });
+
+    // Notify via email
+    $send.email({
+      subject: "New event received",
+      text: JSON.stringify(payload, null, 2),
+    });
+  },
+});
+```
+
+All three destinations are called in parallel after the workflow finishes.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Workflows" icon="workflow" href="/platform/workflows">
+    Learn how workflow steps and execution work.
+  </Card>
+  <Card title="Custom code" icon="code" href="/platform/custom-code">
+    Write Node.js, Python, Go, or Bash in any step.
+  </Card>
+  <Card title="Actions" icon="zap" href="/platform/actions">
+    Use pre-built steps for common integrations.
+  </Card>
+  <Card title="Event sources" icon="bolt" href="/platform/event-sources">
+    Trigger workflows from app events.
+  </Card>
+</CardGroup>

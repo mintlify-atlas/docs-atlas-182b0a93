@@ -1,0 +1,276 @@
+---
+title: "Sources API"
+description: "Create and manage event sources, and retrieve the events they emit, via the REST API."
+---
+
+Event sources watch for new data from apps and services. When a source detects a new event, it emits it — triggering any linked workflows or making the event available to consumers via the REST API or SSE.
+
+## Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/v1/sources` | List sources |
+| `GET` | `/v1/sources/{id}` | Get a source |
+| `POST` | `/v1/sources` | Create a source |
+| `PUT` | `/v1/sources/{id}` | Update a source |
+| `DELETE` | `/v1/sources/{id}` | Delete a source |
+| `GET` | `/v1/sources/{id}/events` | Get events emitted by a source |
+
+---
+
+## List sources
+
+```
+GET https://api.pipedream.com/v1/sources
+```
+
+Returns all event sources owned by the authenticated user.
+
+### Query parameters
+
+<ParamField query="after" type="string">
+  Return sources after this cursor.
+</ParamField>
+
+<ParamField query="before" type="string">
+  Return sources before this cursor.
+</ParamField>
+
+<ParamField query="limit" type="number">
+  Maximum number of sources to return.
+</ParamField>
+
+### Response
+
+<ResponseField name="data" type="array">
+  Array of source objects.
+  <Expandable title="Source object">
+    <ResponseField name="id" type="string">
+      Unique source identifier, prefixed with `dc_`.
+    </ResponseField>
+    <ResponseField name="name" type="string">
+      Human-readable name of the source.
+    </ResponseField>
+    <ResponseField name="name_slug" type="string">
+      URL-safe slug derived from the source name.
+    </ResponseField>
+    <ResponseField name="active" type="boolean">
+      Whether the source is currently active and emitting events.
+    </ResponseField>
+    <ResponseField name="component_id" type="string">
+      The ID of the component backing this source.
+    </ResponseField>
+    <ResponseField name="endpoint_url" type="string">
+      For HTTP-triggered sources, the URL where events are received.
+    </ResponseField>
+    <ResponseField name="created_at" type="number">
+      Unix timestamp (milliseconds) when the source was created.
+    </ResponseField>
+    <ResponseField name="updated_at" type="number">
+      Unix timestamp (milliseconds) of the last update.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="page_info" type="object">
+  Pagination metadata. See the [overview](/api/overview#pagination) for field descriptions.
+</ResponseField>
+
+### Example
+
+```bash
+curl https://api.pipedream.com/v1/sources \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+---
+
+## Get a source
+
+```
+GET https://api.pipedream.com/v1/sources/{id}
+```
+
+### Path parameters
+
+<ParamField path="id" type="string" required>
+  The source ID, prefixed with `dc_`.
+</ParamField>
+
+### Response
+
+<ResponseField name="data" type="object">
+  The source object. Fields are the same as in the list response.
+</ResponseField>
+
+### Example
+
+```bash
+curl https://api.pipedream.com/v1/sources/dc_abc123 \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+---
+
+## Create a source
+
+```
+POST https://api.pipedream.com/v1/sources
+```
+
+### Request body
+
+<ParamField body="component_id" type="string">
+  The key of a registered component to back the source (e.g. `http-new-requests`). Use either `component_id` or `component_code`.
+</ParamField>
+
+<ParamField body="component_code" type="string">
+  Raw component source code as a string. Use either `component_id` or `component_code`.
+</ParamField>
+
+<ParamField body="name" type="string">
+  Human-readable name for the source.
+</ParamField>
+
+<ParamField body="configured_props" type="object">
+  A map of prop names to their configured values. Required for components with props.
+</ParamField>
+
+### Response
+
+Returns the created source object nested under `data`.
+
+### Example
+
+```bash
+curl -X POST https://api.pipedream.com/v1/sources \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "component_id": "http-new-requests",
+    "name": "My HTTP Source"
+  }'
+```
+
+---
+
+## Update a source
+
+```
+PUT https://api.pipedream.com/v1/sources/{id}
+```
+
+### Path parameters
+
+<ParamField path="id" type="string" required>
+  The source ID.
+</ParamField>
+
+### Request body
+
+<ParamField body="active" type="boolean">
+  Set to `true` to activate the source, `false` to pause it.
+</ParamField>
+
+<ParamField body="name" type="string">
+  New name for the source.
+</ParamField>
+
+<ParamField body="configured_props" type="object">
+  Updated prop configuration.
+</ParamField>
+
+### Response
+
+Returns the updated source object nested under `data`.
+
+### Example
+
+```bash
+curl -X PUT https://api.pipedream.com/v1/sources/dc_abc123 \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"active": false}'
+```
+
+---
+
+## Delete a source
+
+```
+DELETE https://api.pipedream.com/v1/sources/{id}
+```
+
+### Path parameters
+
+<ParamField path="id" type="string" required>
+  The source ID.
+</ParamField>
+
+### Response
+
+Returns `204 No Content` on success.
+
+### Example
+
+```bash
+curl -X DELETE https://api.pipedream.com/v1/sources/dc_abc123 \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+<Warning>
+  Deleting a source stops it from emitting events and cannot be undone.
+</Warning>
+
+---
+
+## Get source events
+
+```
+GET https://api.pipedream.com/v1/sources/{id}/events
+```
+
+Returns the most recent events emitted by the source.
+
+### Path parameters
+
+<ParamField path="id" type="string" required>
+  The source ID.
+</ParamField>
+
+### Query parameters
+
+<ParamField query="limit" type="number">
+  Number of events to return. Defaults to `20`.
+</ParamField>
+
+### Response
+
+<ResponseField name="data" type="array">
+  Array of emitted event objects, ordered newest first.
+  <Expandable title="Event object">
+    <ResponseField name="id" type="string">
+      Unique event ID.
+    </ResponseField>
+    <ResponseField name="e" type="object">
+      The event payload.
+    </ResponseField>
+    <ResponseField name="k" type="string">
+      The event type. Currently always `emit`.
+    </ResponseField>
+    <ResponseField name="ts" type="number">
+      The event timestamp in epoch milliseconds.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Example
+
+```bash
+curl "https://api.pipedream.com/v1/sources/dc_abc123/events?limit=10" \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+## Consuming events via SSE
+
+In addition to polling the events endpoint, you can subscribe to a real-time SSE stream for any source. See [SSE destinations](/destinations/sse) for details.

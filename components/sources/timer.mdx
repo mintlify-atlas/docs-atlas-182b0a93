@@ -1,0 +1,271 @@
+---
+title: Timer sources
+description: Poll an API on a schedule using cron expressions or interval seconds with the timer interface prop.
+---
+
+A timer source runs on a schedule. Use timer sources to poll APIs for new data when a service does not support webhooks, or when you want to run a source on a predictable cadence.
+
+## Basic timer source
+
+Add a prop with `type: "$.interface.timer"` to schedule your source. The `default` field controls when it runs:
+
+```javascript
+import { axios } from "@pipedream/platform";
+
+export default {
+  key: "my-timer-source",
+  name: "Poll API Every Minute",
+  version: "0.0.1",
+  type: "source",
+  props: {
+    timer: {
+      type: "$.interface.timer",
+      default: {
+        intervalSeconds: 60,
+      },
+    },
+  },
+  async run({ timestamp, interval_seconds }) {
+    console.log(`Ran at ${new Date(timestamp * 1000).toISOString()}`);
+    console.log(`Interval: ${interval_seconds}s`);
+
+    const data = await axios(this, {
+      url: "https://api.example.com/events",
+    });
+
+    for (const item of data) {
+      this.$emit(item, {
+        id: item.id,
+        summary: item.name,
+        ts: Date.parse(item.created_at),
+      });
+    }
+  },
+};
+```
+
+## Timer event shape
+
+The `run` method for timer sources receives:
+
+```typescript
+{
+  timestamp: number;        // Unix timestamp (seconds) when the timer fired
+  interval_seconds: number; // Configured interval in seconds
+}
+```
+
+## Interval vs. cron
+
+<Tabs>
+  <Tab title="Interval">
+    Run the source every N seconds:
+
+    ```javascript
+    timer: {
+      type: "$.interface.timer",
+      default: {
+        intervalSeconds: 900, // every 15 minutes
+      },
+    },
+    ```
+
+    The minimum interval is 60 seconds.
+  </Tab>
+  <Tab title="Cron">
+    Run the source on a cron schedule:
+
+    ```javascript
+    timer: {
+      type: "$.interface.timer",
+      default: {
+        cron: "0 9 * * 1-5", // 9am every weekday
+      },
+    },
+    ```
+
+    Cron expressions follow standard UNIX cron syntax. All times are UTC.
+  </Tab>
+</Tabs>
+
+<Note>
+The `default` value controls what appears in the UI when a user first adds the source. Users can always change the interval or cron at deploy time.
+</Note>
+
+## Using the default polling interval
+
+The `@pipedream/platform` package exports `DEFAULT_POLLING_SOURCE_TIMER_INTERVAL` (15 minutes in seconds). Use this constant as the default interval for polling sources so your source follows the platform convention:
+
+```javascript
+import { axios, DEFAULT_POLLING_SOURCE_TIMER_INTERVAL } from "@pipedream/platform";
+
+export default {
+  key: "my-polling-source",
+  name: "Poll for New Items",
+  version: "0.0.1",
+  type: "source",
+  props: {
+    timer: {
+      type: "$.interface.timer",
+      default: {
+        intervalSeconds: DEFAULT_POLLING_SOURCE_TIMER_INTERVAL,
+      },
+    },
+    db: "$.service.db",
+  },
+  async run() {
+    // polling logic
+  },
+};
+```
+
+## Persisting state between runs
+
+Polling sources need to remember which items they have already emitted. Use the `db` prop to persist state between runs:
+
+```javascript
+import { axios, DEFAULT_POLLING_SOURCE_TIMER_INTERVAL } from "@pipedream/platform";
+
+export default {
+  key: "rss-new-item",
+  name: "New RSS Item",
+  version: "0.0.1",
+  type: "source",
+  dedupe: "unique",
+  props: {
+    feedUrl: {
+      type: "string",
+      label: "Feed URL",
+      description: "The URL of the RSS feed to monitor.",
+    },
+    timer: {
+      type: "$.interface.timer",
+      default: { intervalSeconds: DEFAULT_POLLING_SOURCE_TIMER_INTERVAL },
+    },
+    db: "$.service.db",
+  },
+  methods: {
+    async fetchFeed(url) {
+      const response = await axios(this, { url });
+      return response.items ?? [];
+    },
+  },
+  async run() {
+    const items = await this.fetchFeed(this.feedUrl);
+    const seenIds = this.db.get("seenIds") ?? [];
+
+    const newItems = items.filter((item) => !seenIds.includes(item.guid));
+
+    for (const item of newItems) {
+      this.$emit(item, {
+        id: item.guid,
+        summary: item.title,
+        ts: item.pubDate ? Date.parse(item.pubDate) : Date.now(),
+      });
+      seenIds.push(item.guid);
+    }
+
+    this.db.set("seenIds", seenIds);
+  },
+};
+```
+
+<Warning>
+Avoid storing unbounded arrays in `db`. If the feed contains thousands of items, the `seenIds` array will grow indefinitely. Consider storing only the most recent N IDs, or storing a cursor (e.g., a timestamp or max ID) instead.
+</Warning>
+
+## Emitting historical events on deploy
+
+Use the `deploy` hook to emit a backfill of recent events when the source is first deployed. This gives connected workflows real data to test with immediately:
+
+```javascript
+export default {
+  key: "github-new-commit",
+  version: "0.0.1",
+  type: "source",
+  dedupe: "unique",
+  props: {
+    github: { type: "app", app: "github" },
+    repoFullname: {
+      propDefinition: [github, "repoFullname"],
+    },
+    timer: {
+      type: "$.interface.timer",
+      default: { intervalSeconds: DEFAULT_POLLING_SOURCE_TIMER_INTERVAL },
+    },
+    db: "$.service.db",
+  },
+  hooks: {
+    async deploy() {
+      // Emit up to 5 historical commits on first deploy
+      await this.getAndProcessData(5);
+    },
+  },
+  async run() {
+    await this.getAndProcessData();
+  },
+};
+```
+
+## Timer source with app connection
+
+Timer sources can connect to authenticated apps exactly like HTTP sources:
+
+```javascript
+import { axios, DEFAULT_POLLING_SOURCE_TIMER_INTERVAL } from "@pipedream/platform";
+
+export default {
+  key: "github-new-issue",
+  name: "New Issue",
+  description: "Emit new events when issues are opened in a GitHub repository.",
+  version: "0.0.1",
+  type: "source",
+  dedupe: "unique",
+  props: {
+    github: { type: "app", app: "github" },
+    repoFullname: {
+      type: "string",
+      label: "Repository",
+      description: "The full repository name, e.g. `owner/repo`.",
+    },
+    timer: {
+      type: "$.interface.timer",
+      default: { intervalSeconds: DEFAULT_POLLING_SOURCE_TIMER_INTERVAL },
+    },
+    db: "$.service.db",
+  },
+  async run() {
+    const lastCreatedAt = this.db.get("lastCreatedAt");
+
+    const issues = await axios(this, {
+      url: `https://api.github.com/repos/${this.repoFullname}/issues`,
+      headers: {
+        Authorization: `token ${this.github.$auth.oauth_access_token}`,
+        "X-GitHub-Api-Version": "2022-11-28",
+      },
+      params: {
+        state: "open",
+        sort: "created",
+        direction: "desc",
+        since: lastCreatedAt,
+      },
+    });
+
+    const newIssues = issues.filter(
+      (issue) => !lastCreatedAt || new Date(issue.created_at) > new Date(lastCreatedAt)
+    );
+
+    for (const issue of newIssues.reverse()) {
+      this.$emit(issue, {
+        id: issue.id,
+        summary: `#${issue.number} ${issue.title}`,
+        ts: Date.parse(issue.created_at),
+      });
+    }
+
+    if (issues.length) {
+      this.db.set("lastCreatedAt", issues[0].created_at);
+    }
+  },
+};
+```

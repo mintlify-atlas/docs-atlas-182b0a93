@@ -1,0 +1,187 @@
+---
+title: "Bash"
+description: "Run Bash scripts in a workflow step. Use shell commands, curl, environment variables, and standard Unix tools."
+---
+
+Bash steps let you run shell scripts in your Pipedream workflows. You have access to standard Unix utilities, `curl` for HTTP requests, environment variables, and the full bash scripting language.
+
+## Writing your first Bash step
+
+Every Bash step is a standard shell script. Write any valid bash:
+
+```bash
+#!/bin/bash
+echo "Hello from Bash!"
+```
+
+## Making HTTP requests with curl
+
+Use `curl` to call external APIs and services:
+
+```bash
+#!/bin/bash
+RESPONSE=$(curl -s \
+  -H "Authorization: Bearer $MY_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  https://api.example.com/data)
+
+echo "Response: $RESPONSE"
+```
+
+### POST requests
+
+```bash
+#!/bin/bash
+RESPONSE=$(curl -s -X POST \
+  -H "Content-Type: application/json" \
+  -d '{"key": "value", "count": 42}' \
+  https://api.example.com/items)
+
+echo $RESPONSE
+```
+
+### Checking HTTP status codes
+
+```bash
+#!/bin/bash
+HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+  https://api.example.com/health)
+
+if [ "$HTTP_STATUS" -ne 200 ]; then
+  echo "Health check failed with status $HTTP_STATUS"
+  exit 1
+fi
+
+echo "Service is healthy"
+```
+
+## Using environment variables
+
+Access Pipedream environment variables and any variables you've configured in your account settings:
+
+```bash
+#!/bin/bash
+# Access environment variables configured in your Pipedream account
+echo "Environment: $PIPEDREAM_ENVIRONMENT"
+
+# Use secrets stored in environment variables
+curl -s \
+  -H "Authorization: Bearer $GITHUB_TOKEN" \
+  https://api.github.com/user
+```
+
+<Tip>
+  Store sensitive values like API keys as environment variables in your Pipedream account settings rather than hardcoding them in your scripts.
+</Tip>
+
+## Processing JSON with jq
+
+`jq` is available for parsing and transforming JSON output:
+
+```bash
+#!/bin/bash
+RESPONSE=$(curl -s https://api.github.com/repos/PipedreamHQ/pipedream)
+
+# Extract specific fields
+STARS=$(echo $RESPONSE | jq '.stargazers_count')
+FORKS=$(echo $RESPONSE | jq '.forks_count')
+NAME=$(echo $RESPONSE | jq -r '.full_name')
+
+echo "Repository: $NAME"
+echo "Stars: $STARS"
+echo "Forks: $FORKS"
+```
+
+## Working with files
+
+Bash steps have access to the `/tmp` directory for temporary file storage:
+
+```bash
+#!/bin/bash
+# Download a file to /tmp
+curl -s -o /tmp/data.csv https://example.com/data.csv
+
+# Process the file
+LINE_COUNT=$(wc -l < /tmp/data.csv)
+echo "Downloaded $LINE_COUNT lines"
+
+# Read and process
+while IFS=, read -r id name email; do
+  echo "Processing user: $name ($email)"
+done < /tmp/data.csv
+```
+
+<Note>
+  Files written to `/tmp` persist only for the duration of the workflow execution. Use a destination like S3 if you need to persist files between workflow runs.
+</Note>
+
+## Piping and chaining commands
+
+```bash
+#!/bin/bash
+# Fetch data, filter with grep, count results
+RESULT=$(curl -s https://api.example.com/logs \
+  | jq -r '.[].message' \
+  | grep -i "error" \
+  | wc -l)
+
+echo "Error count: $RESULT"
+```
+
+## Conditional logic and error handling
+
+```bash
+#!/bin/bash
+set -e  # Exit on any error
+
+check_service() {
+  local URL=$1
+  local STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$URL")
+
+  if [ "$STATUS" -eq 200 ]; then
+    echo "OK: $URL"
+    return 0
+  else
+    echo "FAILED: $URL returned $STATUS"
+    return 1
+  fi
+}
+
+check_service "https://api.example.com/health"
+check_service "https://api.example.com/ready"
+
+echo "All checks passed!"
+```
+
+## Running multiple commands
+
+```bash
+#!/bin/bash
+# Install a tool if not present, then use it
+if ! command -v httpie &> /dev/null; then
+  pip install httpie --quiet
+fi
+
+# Use environment variables to configure behavior
+BASE_URL="https://api.example.com"
+ENDPOINT="/users"
+
+RESPONSE=$(curl -s "${BASE_URL}${ENDPOINT}")
+USER_COUNT=$(echo $RESPONSE | jq 'length')
+
+echo "Total users: $USER_COUNT"
+```
+
+## Logging
+
+Output from `echo` and other commands is captured in the step logs, visible in your workflow execution details:
+
+```bash
+#!/bin/bash
+echo "Starting data sync..."
+echo "Timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+
+RESULT=$(curl -s https://api.example.com/sync -X POST)
+echo "Sync result: $RESULT"
+echo "Done!"
+```

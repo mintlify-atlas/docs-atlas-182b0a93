@@ -1,0 +1,337 @@
+---
+title: "Custom code"
+description: "Run Node.js, Python, Go, or Bash in any workflow step. Import packages, connect to integrated apps, and pass data between steps."
+---
+
+When pre-built actions don't cover your logic, write custom code directly in a workflow step. Pipedream supports four runtimes — Node.js, Python, Go, and Bash — with access to their respective package ecosystems.
+
+## Adding a code step
+
+In the workflow editor, click **+** and select **Run custom code**. Choose your language and write code in the editor.
+
+<Tabs>
+  <Tab title="Node.js">
+    Node.js steps use the `defineComponent` helper and support `async/await`. Import any npm package by declaring it — Pipedream resolves dependencies automatically.
+
+    ```javascript
+    import axios from "axios";
+
+    export default defineComponent({
+      async run({ steps, $ }) {
+        const response = await axios.get("https://api.example.com/data");
+        return response.data;
+      },
+    });
+    ```
+
+    **Runtime:** Node.js 20.x  
+    **Package manager:** npm — declare imports at the top and Pipedream installs them on first run.  
+    **Timeout:** 30 seconds by default, up to 12 minutes on paid plans.
+  </Tab>
+  <Tab title="Python">
+    Python steps support standard Python 3 syntax. Import any PyPI package at the top of the file.
+
+    ```python
+    import pandas as pd
+    import json
+
+    def handler(pd: "pipedream"):
+        data = pd.steps["trigger"]["event"]["body"]
+        df = pd.DataFrame([data])
+        return df.to_dict(orient="records")
+    ```
+
+    **Runtime:** Python 3.11  
+    **Package manager:** pip — import packages and Pipedream installs them automatically.  
+    **Accessing prior steps:** Use `pd.steps["stepName"]["$return_value"]`.
+  </Tab>
+  <Tab title="Go">
+    Go steps are written as a `Handler` function. Import Go modules using standard import syntax.
+
+    ```go
+    package main
+
+    import (
+        "fmt"
+        pd "github.com/PipedreamHQ/pipedream-go"
+    )
+
+    func Handler(pdCtx pd.Context) {
+        // Access trigger event
+        event := pdCtx.Steps["trigger"]["event"]
+        fmt.Println(event)
+
+        // Export a value
+        pd.Export("message", "hello from Go")
+    }
+    ```
+
+    **Runtime:** Go 1.22  
+    **Package manager:** Go modules — import paths are resolved automatically.
+  </Tab>
+  <Tab title="Bash">
+    Bash steps run shell scripts with access to common Unix utilities (`curl`, `jq`, `python3`, `node`, and more).
+
+    ```bash
+    # Access environment variables
+    echo "API key: $MY_API_KEY"
+
+    # Make an HTTP request with curl
+    RESPONSE=$(curl -s "https://api.example.com/health")
+    echo $RESPONSE
+
+    # Use jq to parse JSON
+    echo $RESPONSE | jq '.status'
+    ```
+
+    **Runtime:** Bash 5  
+    **Available tools:** `curl`, `wget`, `jq`, `python3`, `node`, `git`, and standard GNU coreutils.
+  </Tab>
+</Tabs>
+
+## Importing packages
+
+Declare imports at the top of your code. Pipedream parses the imports and installs the necessary packages before the step runs — no `package.json` or `requirements.txt` needed.
+
+<CodeGroup>
+
+```javascript Node.js
+import axios from "axios";
+import _ from "lodash";
+import { parseISO } from "date-fns";
+```
+
+```python Python
+import pandas as pd
+import requests
+from bs4 import BeautifulSoup
+```
+
+```go Go
+import (
+    "fmt"
+    "encoding/json"
+    pd "github.com/PipedreamHQ/pipedream-go"
+)
+```
+
+</CodeGroup>
+
+<Note>
+For Node.js, Pipedream supports any package published to the npm registry. For Python, any package on PyPI. For Go, any public Go module.
+</Note>
+
+## Connecting to apps
+
+Use an `app` prop to connect a Pipedream-managed account to your code step. Pipedream injects credentials at runtime via `this.appName.$auth`.
+
+```javascript
+import { WebClient } from "@slack/web-api";
+
+export default defineComponent({
+  props: {
+    slack: {
+      type: "app",
+      app: "slack",
+    },
+  },
+  async run({ steps, $ }) {
+    const web = new WebClient(this.slack.$auth.oauth_access_token);
+
+    return await web.chat.postMessage({
+      text: "Hello, world!",
+      channel: "#general",
+    });
+  },
+});
+```
+
+For OAuth apps, `$auth` typically contains an `oauth_access_token`. For API key apps, check the app's documentation for the exact field name — it's shown in the Pipedream UI when you connect the account.
+
+<Tip>
+Pipedream automatically refreshes OAuth tokens. You never need to write token refresh logic.
+</Tip>
+
+## Using the platform axios helper
+
+The `@pipedream/platform` package exports an `axios` wrapper that provides better error messages and automatic debug exports when a request fails:
+
+```javascript
+import { axios } from "@pipedream/platform";
+
+export default defineComponent({
+  props: {
+    github: {
+      type: "app",
+      app: "github",
+    },
+  },
+  async run({ steps, $ }) {
+    // Pass $ as the first argument to enable debug exports on error
+    return await axios($, {
+      method: "GET",
+      url: "https://api.github.com/user",
+      headers: {
+        Authorization: `Bearer ${this.github.$auth.oauth_access_token}`,
+        "User-Agent": "pipedream",
+      },
+    });
+  },
+});
+```
+
+When a request fails, the response status, headers, and body are exported to the step automatically for inspection in the event history.
+
+## Accessing and exporting data
+
+### Reading prior step data
+
+```javascript
+export default defineComponent({
+  async run({ steps, $ }) {
+    // Trigger event data
+    const { body, headers } = steps.trigger.event;
+
+    // Return value from a step named "fetchUser"
+    const user = steps.fetchUser.$return_value;
+
+    // Named export from a step named "parseInput"
+    const name = steps.parseInput.name;
+  },
+});
+```
+
+### Exporting data from a step
+
+```javascript
+export default defineComponent({
+  async run({ steps, $ }) {
+    // Return value — available as steps.thisStep.$return_value
+    // in downstream steps
+    return { processed: true, count: 42 };
+  },
+});
+```
+
+Or use named exports:
+
+```javascript
+export default defineComponent({
+  async run({ steps, $ }) {
+    $.export("count", 42);
+    $.export("processedAt", new Date().toISOString());
+    // Available as steps.thisStep.count, steps.thisStep.processedAt
+  },
+});
+```
+
+### Sending an HTTP response
+
+For HTTP-triggered workflows, respond to the caller synchronously:
+
+```javascript
+export default defineComponent({
+  async run({ steps, $ }) {
+    const { name = "world" } = steps.trigger.event.body;
+
+    $.respond({
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+      body: { message: `Hello, ${name}!` },
+    });
+  },
+});
+```
+
+## Environment variables
+
+Access environment variables stored in your [account settings](https://pipedream.com/settings/env-vars) via `process.env`:
+
+```javascript
+export default defineComponent({
+  async run({ steps, $ }) {
+    const apiKey = process.env.MY_SERVICE_API_KEY;
+    const region = process.env.AWS_REGION;
+    // ...
+  },
+});
+```
+
+Environment variables are available in all languages:
+
+<CodeGroup>
+
+```javascript Node.js
+const apiKey = process.env.MY_API_KEY;
+```
+
+```python Python
+import os
+api_key = os.environ["MY_API_KEY"]
+```
+
+```go Go
+import "os"
+apiKey := os.Getenv("MY_API_KEY")
+```
+
+```bash Bash
+echo $MY_API_KEY
+```
+
+</CodeGroup>
+
+## Utility functions
+
+The `@pipedream/platform` package also exports utility functions:
+
+```javascript
+import { cloneSafe, jsonStringifySafe } from "@pipedream/platform";
+
+export default defineComponent({
+  async run({ steps, $ }) {
+    // Safe deep clone — handles circular references
+    const copy = cloneSafe(steps.trigger.event);
+
+    // Safe JSON stringify — handles circular references
+    const str = jsonStringifySafe({ data: copy });
+
+    return JSON.parse(str);
+  },
+});
+```
+
+## Ending a workflow from code
+
+Call `$.flow.exit()` to stop the workflow at any step without an error:
+
+```javascript
+export default defineComponent({
+  async run({ steps, $ }) {
+    const { action } = steps.trigger.event.body;
+
+    if (action !== "opened") {
+      $.flow.exit(`Skipping — action is "${action}", not "opened"`);
+    }
+
+    // Only reached when action === "opened"
+  },
+});
+```
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Actions" icon="zap" href="/platform/actions">
+    Use pre-built steps for common operations.
+  </Card>
+  <Card title="Workflows" icon="workflow" href="/platform/workflows">
+    Learn about triggers, step chaining, and execution controls.
+  </Card>
+  <Card title="Destinations" icon="database" href="/platform/destinations">
+    Deliver data asynchronously to S3, Snowflake, HTTP, and more.
+  </Card>
+  <Card title="Event sources" icon="bolt" href="/platform/event-sources">
+    Build custom polling sources with Node.js.
+  </Card>
+</CardGroup>

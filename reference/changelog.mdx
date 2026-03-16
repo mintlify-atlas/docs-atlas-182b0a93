@@ -1,0 +1,210 @@
+---
+title: "Changelog"
+description: "Recent updates to the Pipedream SDK and platform."
+---
+
+This page tracks notable releases and changes to Pipedream. SDK changelog entries are drawn from the `@pipedream/sdk` package.
+
+<Note>
+For a full history, see the [SDK CHANGELOG on GitHub](https://github.com/PipedreamHQ/pipedream/blob/master/packages/sdk/CHANGELOG.md). Platform-level changes are announced in the [community forum](https://pipedream.com/community).
+</Note>
+
+## SDK changelog
+
+### [1.8.0] — 2025-08-13
+
+**Added**
+
+- `categoryIds` parameter on `getApps` for filtering apps by category
+- `getAppCategories` method to retrieve available app categories
+
+---
+
+### [1.7.0] — 2025-07-03
+
+**Added**
+
+- Optional `scope` parameter on `backendClient` creation
+
+---
+
+### [1.6.11] — 2025-07-02
+
+**Added**
+
+- `stash` field added to `V1Component` type
+
+---
+
+### [1.6.10] — 2025-07-01
+
+**Added**
+
+- `sortKey` and `sortDirection` options on `getApps`
+
+---
+
+### [1.6.9] — 2025-06-10
+
+**Added**
+
+- Types for previously missing configurable props
+
+**Fixed**
+
+- `Defaultable` type now correctly handles arrays
+- `ConfigurablePropTimer` type now defines cron expressions and time intervals
+- `auth` field in the SQL prop type marked as optional
+- `App` type includes the `description` field returned by the API
+- `GetAppsResponse` type includes pagination fields
+
+---
+
+### [1.6.8] — 2025-06-07
+
+**Added**
+
+- `endpoint_url` field on component metadata — provides the URL to the HTTP interface of the component
+- Missing pagination fields on `GetComponentsResponse` and `GetAccountsResponse` types
+
+---
+
+### [1.6.7] — 2025-06-06
+
+**Added**
+
+- `stashId` option on `runAction` — allows files to persist between action runs
+
+---
+
+### [1.6.6] — 2025-06-05
+
+**Added**
+
+- Support for `sql` prop type in the `connect-react` package
+
+---
+
+### [1.6.5] — 2025-06-02
+
+**Fixed**
+
+- `deployTrigger` now correctly sends the workflow ID to the API
+
+---
+
+### [1.6.4] — 2025-05-30
+
+**Added**
+
+- `onClose` callback on `connectAccount` — receives a `ConnectStatus` object with `successful` and `completed` boolean properties
+
+---
+
+### [1.6.3] — 2025-05-20
+
+**Added**
+
+- `rawAccessToken` getter on `BackendClient`
+
+---
+
+### [1.6.2] — 2025-05-20
+
+**Added**
+
+- `BackendClient` can now be created with just an `AccessToken`
+
+---
+
+### [1.6.1] — 2025-05-20
+
+**Added**
+
+- `rawToken` getter on `BrowserClient`
+
+**Changed**
+
+- `GetComponentsResponse` type now includes `configurable_props`
+
+---
+
+### [1.6.0] — 2025-04-30
+
+**Added**
+
+- `configuredProps` argument on `updateTrigger`
+
+**Fixed**
+
+- Corrected return type of `updateTrigger`
+- `ConfigureComponentContext` property values changed from explicit `any` to `unknown`
+
+---
+
+### [1.5.0] — 2025-04-08
+
+**Added**
+
+- `query` option on `configureComponent` for API-based search
+
+---
+
+### [1.4.0] — 2025-03-12
+
+**Added**
+
+- `description` and `component_type` fields on `V1Component`
+
+---
+
+### [1.3.0] — 2025-01-30
+
+**Added**
+
+- Edge-compatible builds: replaced `simple-oauth2` with `oauth4webapi`
+- ESM and CJS output (previously CJS only)
+- Minimized bundle size
+
+---
+
+### [1.2.0] — 2025-01-23
+
+**Added**
+
+- New methods and types for the deployed triggers API
+
+---
+
+### [1.1.0] — 2024-12-10
+
+**Added**
+
+- Public methods and types for the components API documented
+
+**Changed**
+
+- Renamed methods in the components API (e.g. `componentConfigure` → `configureComponent`)
+- Renamed types (e.g. `ComponentRequestResponse` → `GetComponentResponse`)
+- Previous names marked as deprecated
+
+---
+
+### [1.0.0] — 2024-11-01
+
+Initial stable release of the Pipedream SDK.
+
+**Changed**
+
+- `ServerClient` renamed to `BackendClient`
+- Client factory methods renamed for clarity
+- Project-key-based authentication replaced with OAuth token-based authentication
+- Removed `oauthClient` optional argument from `BackendClient` constructor
+
+---
+
+## Staying current
+
+- **GitHub releases:** [github.com/PipedreamHQ/pipedream/releases](https://github.com/PipedreamHQ/pipedream/releases)
+- **Community forum:** [pipedream.com/community](https://pipedream.com/community)
+- **npm package:** [`@pipedream/sdk`](https://www.npmjs.com/package/@pipedream/sdk)

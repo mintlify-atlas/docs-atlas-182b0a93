@@ -1,0 +1,84 @@
+---
+title: MCP server overview
+description: Pipedream's hosted MCP server exposes 2,800+ APIs as Model Context Protocol tools, enabling AI agents to call real-world APIs on behalf of your users.
+---
+
+Pipedream's MCP (Model Context Protocol) server gives AI agents authenticated access to 2,800+ APIs through a single, hosted endpoint. Your users connect their accounts once, and any MCP-compatible AI client can call actions on their behalf using those credentials.
+
+## What the MCP server provides
+
+- **2,800+ APIs, 10,000+ tools** — Every app and action in the Pipedream registry is available as an MCP tool.
+- **Built-in authentication** — Pipedream manages OAuth flows, token refresh, and credential storage. No manual token handling in your agent.
+- **Per-user auth** — Each MCP session is scoped to an external user ID. When your user connects their Slack account, only tools for that user's Slack session are available.
+- **App-specific and dynamic server modes** — Expose tools for a single app or let the agent discover and enable apps dynamically.
+
+## Hosted server
+
+Pipedream hosts the MCP server at `mcp.pipedream.com`. No infrastructure to run or maintain.
+
+```
+https://mcp.pipedream.com/{external_user_id}/{app}
+```
+
+For example, to give your user `user-123` access to Slack tools:
+
+```
+https://mcp.pipedream.com/user-123/slack
+```
+
+## Server modes
+
+### App-specific mode
+
+```
+/{external_user_id}/{app}
+```
+
+Exposes all tools for a single app. The `{app}` segment is the app's name slug (e.g. `slack`, `github`, `gmail`). All tools available for that app are present in the tool list.
+
+Use this mode when:
+- Your agent has a clear, predetermined integration target
+- You want a minimal tool surface to reduce prompt token usage
+- You need predictable, stable tool names
+
+### Dynamic mode
+
+```
+/{external_user_id}
+```
+
+Exposes tools for all connected accounts for the user. The agent can discover and call tools across any app the user has connected. Used in Pipedream's [chat.pipedream.com](https://chat.pipedream.com) demo.
+
+<Note>
+  Dynamic mode is experimental. The tool list may update between calls as the user connects or disconnects accounts.
+</Note>
+
+## Authentication to the MCP server
+
+The hosted MCP server authenticates using Pipedream Connect credentials. When you configure an MCP client to connect to `mcp.pipedream.com`, you provide your Pipedream Connect API credentials. The server uses those to look up the external user's connected accounts.
+
+See [MCP server setup](/connect/mcp/setup) for the full configuration process.
+
+## Transports
+
+The Pipedream MCP server supports two transports:
+
+- **Streamable HTTP** — The recommended transport for production use. Use the `/v1/{external_user_id}/{app}` path.
+- **SSE (Server-Sent Events)** — Legacy transport for clients that require it. Use the `/{external_user_id}/{app}` path directly.
+
+## Self-hosting
+
+Pipedream publishes a [reference implementation](https://github.com/PipedreamHQ/pipedream/tree/master/modelcontextprotocol) you can run yourself with `npx @pipedream/mcp`. This is useful for custom deployments or for embedding the MCP server within your own application.
+
+For most use cases, the hosted server is the better choice. See [self-hosting the MCP server](/connect/mcp/self-hosting) for details.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="MCP server setup" icon="gear" href="/connect/mcp/setup">
+    Configure an MCP client to connect to Pipedream's hosted server.
+  </Card>
+  <Card title="Self-hosting" icon="server" href="/connect/mcp/self-hosting">
+    Run your own MCP server using the reference implementation.
+  </Card>
+</CardGroup>

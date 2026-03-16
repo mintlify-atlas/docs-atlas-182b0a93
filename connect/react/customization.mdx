@@ -1,0 +1,264 @@
+---
+title: Theming and customization
+description: Customize the appearance of @pipedream/connect-react components using styles, class names, a theme object, or fully custom inner components.
+---
+
+`@pipedream/connect-react` provides a `CustomizeProvider` that wraps your form components and applies style, class name, theme, and component overrides throughout the entire component tree.
+
+## Setup
+
+Wrap `ComponentFormContainer` (or any connect-react component) with `CustomizeProvider`, nested inside `FrontendClientProvider`:
+
+```tsx
+import {
+  FrontendClientProvider,
+  CustomizeProvider,
+  ComponentFormContainer,
+} from "@pipedream/connect-react";
+
+<FrontendClientProvider client={client}>
+  <CustomizeProvider
+    theme={{ borderRadius: 0 }}
+    classNamePrefix="my-app-"
+  >
+    <ComponentFormContainer
+      userId={userId}
+      componentKey="slack-send-message"
+      configuredProps={configuredProps}
+      onUpdateConfiguredProps={setConfiguredProps}
+    />
+  </CustomizeProvider>
+</FrontendClientProvider>
+```
+
+---
+
+## `theme` prop
+
+The theme object controls the base visual variables used by all inner components.
+
+```tsx
+<CustomizeProvider
+  theme={{
+    borderRadius: 0,
+    colors: {
+      primary: "hsl(200, 100%, 60%)",
+      primary75: "hsl(200, 100%, 55%)",
+      primary50: "hsl(200, 100%, 40%)",
+      primary25: "hsl(200, 100%, 35%)",
+
+      danger: "#DE350B",
+      dangerLight: "#FFBDAD",
+
+      neutral0: "hsl(200, 50%, 97%)",
+      neutral5: "hsl(200, 50%, 95%)",
+      neutral10: "hsl(200, 50%, 90%)",
+      neutral20: "hsl(200, 50%, 80%)",
+      neutral30: "hsl(200, 50%, 70%)",
+      neutral40: "hsl(200, 50%, 60%)",
+      neutral50: "hsl(200, 50%, 50%)",
+      neutral60: "hsl(200, 50%, 40%)",
+      neutral70: "hsl(200, 50%, 30%)",
+      neutral80: "hsl(200, 50%, 20%)",
+      neutral90: "hsl(200, 50%, 10%)",
+    },
+    spacing: {
+      baseUnit: 4,
+      controlHeight: 10,
+      menuGutter: 6,
+    },
+  }}
+/>
+```
+
+<ParamField body="borderRadius" type="number">
+  Base border radius in pixels applied to form controls.
+</ParamField>
+
+<ParamField body="colors" type="object">
+  Color palette used across all inner components. `primary` shades control interactive elements; `neutral` shades control backgrounds and borders.
+</ParamField>
+
+<ParamField body="spacing" type="object">
+  Spacing configuration: `baseUnit` (px), `controlHeight` (px), `menuGutter` (px).
+</ParamField>
+
+---
+
+## `styles` prop
+
+The recommended way to override individual element styles. Each key corresponds to an inner component. You can pass a `CSSProperties` object or a callback function that receives the base styles and the theme.
+
+```tsx
+<CustomizeProvider
+  styles={{
+    label: { fontSize: "80%" },
+    controlInput: (base, { theme }) => ({
+      ...base,
+      borderTop: 0,
+      borderLeft: 0,
+      borderRight: 0,
+      borderBottom: "2px solid",
+      borderColor: theme.colors.primary,
+      backgroundColor: theme.colors.neutral0,
+    }),
+  }}
+/>
+```
+
+### Styleable inner components
+
+| Key | Element |
+|---|---|
+| `componentForm` | The outer form wrapper |
+| `connectButton` | The OAuth connect button |
+| `controlAny` | Free-form value input |
+| `controlApp` | App auth selector |
+| `controlArray` | Array value input |
+| `controlBoolean` | Boolean toggle |
+| `controlHttpRequest` | HTTP request builder |
+| `controlInput` | Text/number input |
+| `controlObject` | Object value input |
+| `controlSql` | SQL editor |
+| `controlSubmit` | Submit button |
+| `description` | Prop description text |
+| `error` / `errors` | Error message display |
+| `field` | Individual field wrapper |
+| `heading` | Form heading |
+| `label` | Prop label |
+| `optionalFields` | Optional props section |
+| `optionalFieldButton` | Toggle for optional props |
+| `loadMoreButton` | Pagination load more button |
+
+### Dropdown components (react-select)
+
+Dropdown components (`controlSelect`, `controlAppSelect`) use [react-select](https://react-select.com/) internally and accept react-select style configuration:
+
+```tsx
+<CustomizeProvider
+  styles={{
+    controlSelect: {
+      control: (base, { theme }) => ({
+        ...base,
+        borderRadius: 0,
+        borderColor: theme.colors.primary25,
+        fontSize: "small",
+        maxHeight: "36px",
+      }),
+    },
+  }}
+/>
+```
+
+---
+
+## `classNames` prop
+
+Add custom CSS class names to inner components. Each key accepts a string or a callback function.
+
+```tsx
+<CustomizeProvider
+  classNames={{
+    controlInput: ({ prop }) =>
+      prop.type === "number" ? "border-red-600" : "border-blue-600",
+    label: "text-sm font-medium",
+  }}
+/>
+```
+
+<Note>
+  If you use `classNames` to override styles at the same specificity level as the built-in styles, ensure your stylesheet loads after `@pipedream/connect-react`'s styles.
+</Note>
+
+---
+
+## `classNamePrefix` prop
+
+All inner elements receive a class name with this prefix automatically. Useful for targeting elements in a plain CSS stylesheet.
+
+```tsx
+<CustomizeProvider classNamePrefix="my-app-" />
+```
+
+This causes every inner element to receive a class like `my-app-label`, `my-app-controlinput`, etc.
+
+---
+
+## `components` prop
+
+Replace individual inner components with your own implementations. Use the `useCustomize` hook inside your custom component to stay compatible with other customization options.
+
+```tsx
+import type { CSSProperties } from "react";
+import type { ConfigurableProp, LabelProps } from "@pipedream/connect-react";
+import { useCustomize } from "@pipedream/connect-react";
+
+export function CustomLabel<T extends ConfigurableProp>(props: LabelProps<T>) {
+  const { text, field } = props;
+  const { id } = field;
+  const { getProps, theme } = useCustomize();
+
+  const baseStyles: CSSProperties = {
+    color: theme.colors.neutral90,
+    fontWeight: 450,
+    gridArea: "label",
+    textTransform: "capitalize",
+    lineHeight: "1.5",
+  };
+
+  return (
+    <label htmlFor={id} {...getProps("label", baseStyles, props)}>
+      {text}
+    </label>
+  );
+}
+```
+
+```tsx
+import { CustomLabel } from "./CustomLabel";
+
+<CustomizeProvider
+  components={{
+    Label: CustomLabel,
+  }}
+/>
+```
+
+### Replaceable components
+
+| Key | Default component |
+|---|---|
+| `Description` | Prop description text |
+| `Errors` | Error message list |
+| `Label` | Prop label |
+| `OptionalFieldButton` | Toggle for optional props section |
+| `Button` | Generic button (load more, etc.) |
+
+---
+
+## `unstyled` prop
+
+Strip all default styles and start from scratch:
+
+```tsx
+<CustomizeProvider unstyled={true} />
+```
+
+With `unstyled`, you can apply your own CSS entirely through `classNames`, `classNamePrefix`, or global CSS targeting the element structure.
+
+---
+
+## `useCustomize` hook
+
+Inside a custom inner component, use `useCustomize` to access the current theme and helper functions that merge base styles with any user customizations:
+
+```tsx
+const { theme, getProps, getStyles, getClassNames, getComponents } = useCustomize();
+
+// Apply merged className and style to an element
+<div {...getProps("field", baseStyles, props)}>
+  {children}
+</div>
+```
+
+See the [hooks reference](/connect/react/hooks) for full details.

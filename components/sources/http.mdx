@@ -1,0 +1,240 @@
+---
+title: HTTP sources
+description: Expose a unique webhook endpoint and emit events from every incoming HTTP request.
+---
+
+An HTTP source exposes a unique URL. Any HTTP request to that URL triggers the source's `run` method with the full request payload. This is the standard pattern for webhook-based integrations.
+
+## Basic HTTP source
+
+Add `$.interface.http` as a prop to get a unique endpoint URL. Pipedream injects the HTTP interface as `this.http` at runtime, and passes the incoming request to `run` as the `event` argument:
+
+```javascript
+export default {
+  key: "my-http-source",
+  name: "New HTTP Request",
+  description: "Emit an event on every incoming HTTP request.",
+  version: "0.0.1",
+  type: "source",
+  props: {
+    http: "$.interface.http",
+  },
+  run(event) {
+    console.log(event);
+    this.$emit(event, {
+      summary: `${event.method} ${event.path}`,
+    });
+  },
+};
+```
+
+When you deploy this source, Pipedream assigns a unique URL like `https://en123abc.m.pipedream.net`. Sending a `POST` request to that URL triggers `run` with the event below.
+
+## HTTP event shape
+
+The `event` argument passed to `run` for HTTP sources contains:
+
+```typescript
+{
+  method: string;    // "GET", "POST", "PUT", etc.
+  path: string;      // e.g. "/"
+  query: {
+    [key: string]: string;  // URL query parameters
+  };
+  headers: {
+    [key: string]: string;  // Request headers (lowercase keys)
+  };
+  body?: {
+    [key: string]: any;  // Parsed JSON or form body
+  };
+  bodyRaw?: string;    // Raw body string
+}
+```
+
+Example event from a `POST https://en123abc.m.pipedream.net` with JSON body:
+
+```json
+{
+  "method": "POST",
+  "path": "/",
+  "query": {},
+  "headers": {
+    "content-type": "application/json",
+    "user-agent": "curl/7.88.1"
+  },
+  "body": {
+    "message": "hello"
+  },
+  "bodyRaw": "{\"message\":\"hello\"}"
+}
+```
+
+## Custom HTTP responses
+
+By default, Pipedream returns a `200 OK` with an empty body. To send a custom response, set `customResponse: true` on the interface prop and call `this.http.respond()` from `run`:
+
+```javascript
+export default {
+  key: "http-custom-response",
+  name: "HTTP with Custom Response",
+  version: "0.0.1",
+  type: "source",
+  props: {
+    http: {
+      type: "$.interface.http",
+      customResponse: true,
+    },
+  },
+  run(event) {
+    // Send a custom response back to the caller
+    this.http.respond({
+      status: 200,
+      body: JSON.stringify({ received: true }),
+      headers: {
+        "content-type": "application/json",
+      },
+    });
+
+    this.$emit(event, {
+      summary: `${event.method} ${event.path}`,
+    });
+  },
+};
+```
+
+<Note>
+You must call `this.http.respond()` before `run` returns. If `customResponse` is `true` and you do not call `respond()`, the caller will receive a timeout error.
+</Note>
+
+## Production HTTP source example
+
+The built-in **New Requests** HTTP source in the Pipedream registry demonstrates a complete HTTP component with configurable response codes, content types, and body filtering:
+
+```javascript
+import http from "../../http.app.mjs";
+
+export default {
+  key: "http-new-requests",
+  name: "New Requests",
+  description:
+    "Get a URL and emit the full HTTP event on every request (including headers and query parameters). You can also configure the HTTP response code, body, and more.",
+  version: "0.1.2",
+  type: "source",
+  props: {
+    httpInterface: {
+      type: "$.interface.http",
+      customResponse: true,
+    },
+    emitBodyOnly: {
+      type: "boolean",
+      label: "Body Only",
+      description:
+        "Select `true` to emit only the request body instead of the full HTTP event.",
+      optional: true,
+      default: false,
+    },
+    resStatusCode: {
+      type: "string",
+      label: "Response Status Code",
+      description: "The status code to return in the HTTP response.",
+      optional: true,
+      default: "200",
+    },
+    resContentType: {
+      type: "string",
+      label: "Response Content-Type",
+      description: "The `Content-Type` header to return in the HTTP response.",
+      optional: true,
+      default: "application/json",
+    },
+    resBody: {
+      type: "string",
+      label: "Response Body",
+      description: "The body to return in the HTTP response.",
+      optional: true,
+      default: '{ "success": true }',
+    },
+  },
+  async run(event) {
+    this.httpInterface.respond({
+      status: this.resStatusCode,
+      body: this.resBody,
+      headers: { "content-type": this.resContentType },
+    });
+
+    const payload = this.emitBodyOnly ? event.body : event;
+    this.$emit(payload, {
+      summary: `${event.method} ${event.path}`,
+    });
+  },
+};
+```
+
+## Using HTTP sources for webhooks
+
+For services that push events via webhooks, the recommended pattern is:
+
+1. Expose the HTTP endpoint via `$.interface.http`.
+2. Register the endpoint URL with the third-party service in the `activate` hook.
+3. Parse the incoming payload in `run` and emit the relevant events.
+4. Deregister the webhook in the `deactivate` hook.
+
+```javascript
+import { axios } from "@pipedream/platform";
+
+export default {
+  key: "myapp-new-event",
+  name: "New Event (Instant)",
+  version: "0.0.1",
+  type: "source",
+  props: {
+    myapp: { type: "app", app: "myapp" },
+    http: { type: "$.interface.http", customResponse: true },
+    db: "$.service.db",
+  },
+  hooks: {
+    async activate() {
+      // Register the Pipedream endpoint as a webhook with the external API
+      const { id } = await axios(this, {
+        method: "POST",
+        url: "https://api.myapp.com/webhooks",
+        headers: {
+          Authorization: `Bearer ${this.myapp.$auth.api_key}`,
+        },
+        data: {
+          url: this.http.endpoint,
+          events: ["new_event"],
+        },
+      });
+      this.db.set("webhookId", id);
+    },
+    async deactivate() {
+      const webhookId = this.db.get("webhookId");
+      await axios(this, {
+        method: "DELETE",
+        url: `https://api.myapp.com/webhooks/${webhookId}`,
+        headers: {
+          Authorization: `Bearer ${this.myapp.$auth.api_key}`,
+        },
+      });
+    },
+  },
+  run(event) {
+    this.http.respond({ status: 200, body: "OK" });
+    this.$emit(event.body, {
+      summary: `New event: ${event.body.type}`,
+      ts: Date.now(),
+    });
+  },
+};
+```
+
+## Accessing the endpoint URL
+
+When `customResponse` is not set, the HTTP interface object exposes a single property:
+
+```javascript
+this.http.endpoint // "https://en123abc.m.pipedream.net"
+```
+
+Use `this.http.endpoint` inside `hooks.activate` to pass the URL to the external service.

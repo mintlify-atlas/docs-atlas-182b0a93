@@ -1,0 +1,169 @@
+---
+title: "SSE"
+description: "Publish events to a named SSE channel using $send.sse(). Consume the stream in real time via Pipedream's SSE API."
+---
+
+The SSE (Server-Sent Events) destination publishes a message to a named channel. Any client subscribed to that channel via Pipedream's SSE API will receive the event in real time. Use it to push live updates to browser clients, dashboards, or any consumer that supports SSE.
+
+## Usage
+
+```javascript
+export default defineComponent({
+  async run({ steps, $ }) {
+    $send.sse({
+      channel: "my-updates",
+      payload: {
+        message: "Hello from Pipedream!",
+        timestamp: new Date().toISOString(),
+      },
+    })
+  }
+})
+```
+
+## Parameters
+
+<ParamField body="channel" type="string" required>
+  The name of the SSE channel to publish to. Clients subscribe to a specific channel by name. Choose a unique, descriptive name (for example, `"order-updates"` or `"dashboard-metrics"`).
+</ParamField>
+
+<ParamField body="payload" type="string | object" required>
+  The data to publish to the channel. Objects are serialized to JSON. The payload is delivered as the `data` field of the SSE event.
+</ParamField>
+
+## Consuming the SSE stream
+
+Subscribe to your channel using Pipedream's SSE API. The endpoint format is:
+
+```
+https://rt.pipedream.com/sse/dc/{deploymentId}/ch/{channelName}
+```
+
+### Browser example
+
+```javascript
+const source = new EventSource(
+  "https://rt.pipedream.com/sse/dc/dc_abc123/ch/my-updates",
+);
+
+source.addEventListener("message", (event) => {
+  const data = JSON.parse(event.data);
+  console.log("Received:", data);
+});
+
+source.addEventListener("error", () => {
+  console.log("Connection error, retrying...");
+});
+```
+
+### Node.js example
+
+```javascript
+import EventSource from "eventsource";
+
+const source = new EventSource(
+  "https://rt.pipedream.com/sse/dc/dc_abc123/ch/my-updates",
+);
+
+source.on("message", (event) => {
+  const data = JSON.parse(event.data);
+  console.log("Received:", data);
+});
+```
+
+## Examples
+
+### Push live order updates
+
+```javascript
+export default defineComponent({
+  async run({ steps, $ }) {
+    const order = steps.trigger.event.body
+
+    $send.sse({
+      channel: "order-updates",
+      payload: {
+        orderId: order.id,
+        status: order.status,
+        updatedAt: new Date().toISOString(),
+        customer: order.customer.name,
+      },
+    })
+  }
+})
+```
+
+### Stream workflow metrics to a dashboard
+
+```javascript
+export default defineComponent({
+  async run({ steps, $ }) {
+    const metrics = steps.calculate_metrics.$return_value
+
+    $send.sse({
+      channel: "dashboard-metrics",
+      payload: {
+        activeUsers: metrics.activeUsers,
+        requestsPerMinute: metrics.rpm,
+        errorRate: metrics.errorRate,
+        timestamp: new Date().toISOString(),
+      },
+    })
+
+    return metrics
+  }
+})
+```
+
+### Broadcast alerts
+
+```javascript
+export default defineComponent({
+  async run({ steps, $ }) {
+    const alert = steps.trigger.event.body
+
+    $send.sse({
+      channel: "alerts",
+      payload: {
+        type: alert.severity,
+        title: alert.title,
+        message: alert.description,
+        source: alert.source,
+        timestamp: new Date().toISOString(),
+      },
+    })
+  }
+})
+```
+
+### Fan out to multiple channels
+
+```javascript
+export default defineComponent({
+  async run({ steps, $ }) {
+    const event = steps.trigger.event.body
+
+    // Publish to a general channel
+    $send.sse({
+      channel: "all-events",
+      payload: event,
+    })
+
+    // Also publish to a type-specific channel
+    if (event.type) {
+      $send.sse({
+        channel: `events-${event.type}`,
+        payload: event,
+      })
+    }
+  }
+})
+```
+
+## Delivery behavior
+
+`$send.sse()` is **asynchronous**. Your step completes immediately after the call. Pipedream delivers the event to any connected subscribers in real time. If no clients are currently subscribed, the event is not buffered — it is dropped.
+
+<Note>
+  SSE events are delivered in real time to active subscribers only. If you need reliable delivery to consumers that may be offline, use the HTTP or S3 destination instead.
+</Note>

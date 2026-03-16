@@ -1,0 +1,208 @@
+---
+title: "Components API"
+description: "List, retrieve, configure, and run Pipedream components via the REST API."
+---
+
+Components are the building blocks of Pipedream — reusable pieces of code that can act as event sources (triggers) or actions. The Components API lets you discover, configure, and execute components programmatically.
+
+## Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/v1/components` | List components |
+| `GET` | `/v1/components/{key}` | Get a component by key |
+| `POST` | `/v1/components` | Create (publish) a component |
+| `PUT` | `/v1/components/{id}` | Update a component |
+
+<Note>
+  The Connect SDK exposes higher-level methods for configuring and running components. See [Platform SDK overview](/api/platform/overview) for details.
+</Note>
+
+---
+
+## List components
+
+```
+GET https://api.pipedream.com/v1/components
+```
+
+Returns components available in the Pipedream registry. You can filter by app, type, or search query.
+
+### Query parameters
+
+<ParamField query="app" type="string">
+  Filter by app name slug (e.g. `slack`, `github`). Returns only components for that app.
+</ParamField>
+
+<ParamField query="q" type="string">
+  Search query to filter components by name or description.
+</ParamField>
+
+<ParamField query="after" type="string">
+  Return components after this cursor.
+</ParamField>
+
+<ParamField query="before" type="string">
+  Return components before this cursor.
+</ParamField>
+
+<ParamField query="limit" type="number">
+  Maximum number of components to return. Defaults to `20`.
+</ParamField>
+
+### Response
+
+<ResponseField name="data" type="array">
+  Array of component objects.
+  <Expandable title="Component object">
+    <ResponseField name="name" type="string">
+      Human-readable name of the component.
+    </ResponseField>
+    <ResponseField name="key" type="string">
+      Unique key that identifies the component (e.g. `slack-send-message`).
+    </ResponseField>
+    <ResponseField name="version" type="string">
+      Semver version string of the component.
+    </ResponseField>
+    <ResponseField name="description" type="string">
+      Short description of what the component does.
+    </ResponseField>
+    <ResponseField name="component_type" type="string">
+      Either `action` or `trigger`.
+    </ResponseField>
+    <ResponseField name="configurable_props" type="array">
+      Array of prop definitions that describe what inputs the component accepts.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="page_info" type="object">
+  Pagination metadata. See the [overview](/api/overview#pagination) for field descriptions.
+</ResponseField>
+
+### Example
+
+```bash
+curl "https://api.pipedream.com/v1/components?app=slack&limit=5" \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+---
+
+## Get a component
+
+```
+GET https://api.pipedream.com/v1/components/{key}
+```
+
+Returns a single component by its unique key.
+
+### Path parameters
+
+<ParamField path="key" type="string" required>
+  The component key (e.g. `slack-send-message`, `github-new-issue`).
+</ParamField>
+
+### Response
+
+<ResponseField name="data" type="object">
+  The component object. Fields are the same as in the list response.
+</ResponseField>
+
+### Example
+
+```bash
+curl https://api.pipedream.com/v1/components/slack-send-message \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+---
+
+## Create a component
+
+```
+POST https://api.pipedream.com/v1/components
+```
+
+Publishes a new component to your account's registry.
+
+### Request body
+
+<ParamField body="component_code" type="string" required>
+  The full component source code as a string. Must export a valid Pipedream component definition.
+</ParamField>
+
+### Response
+
+Returns the created component object nested under `data`.
+
+### Example
+
+```bash
+curl -X POST https://api.pipedream.com/v1/components \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "component_code": "export default { name: \"My Action\", key: \"my-action\", version: \"0.0.1\", type: \"action\", async run() { return 42; } }"
+  }'
+```
+
+---
+
+## Update a component
+
+```
+PUT https://api.pipedream.com/v1/components/{id}
+```
+
+Updates an existing component, typically to publish a new version.
+
+### Path parameters
+
+<ParamField path="id" type="string" required>
+  The component ID.
+</ParamField>
+
+### Request body
+
+<ParamField body="component_code" type="string">
+  Updated component source code.
+</ParamField>
+
+### Response
+
+Returns the updated component object nested under `data`.
+
+---
+
+## Configurable props
+
+Components declare inputs as **configurable props**. The full list of prop types is:
+
+| Type | Description |
+|------|-------------|
+| `app` | An authenticated app connection (`{ authProvisionId: string }`) |
+| `string` | A text input |
+| `string[]` | An array of text values |
+| `integer` | A numeric integer |
+| `integer[]` | An array of integers |
+| `boolean` | A true/false value |
+| `object` | A JSON object |
+| `any` | Any JSON-serializable value |
+| `$.interface.http` | An HTTP endpoint interface |
+| `$.interface.timer` | A timer interface (interval or cron) |
+| `$.interface.apphook` | A webhook-based app hook |
+| `$.service.db` | A persistent key-value store |
+| `sql` | A SQL query prop with schema introspection |
+
+Props can also carry metadata fields:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `label` | `string` | Display label shown in the UI |
+| `description` | `string` | Help text for the prop |
+| `optional` | `boolean` | Whether the prop can be left unconfigured |
+| `remoteOptions` | `boolean` | Whether to call `configureComponent` to fetch options |
+| `useQuery` | `boolean` | Whether `configureComponent` accepts a `query` parameter |
+| `reloadProps` | `boolean` | Whether setting this prop requires a call to `reloadComponentProps` |
+| `hidden` | `boolean` | Whether to hide the prop from the user |

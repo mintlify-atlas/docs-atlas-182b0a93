@@ -1,0 +1,227 @@
+---
+title: "Workflows API"
+description: "Create, retrieve, update, and delete Pipedream workflows via the REST API."
+---
+
+Workflows are sequences of steps triggered by an event — an HTTP request, a timer, or a new event from a connected app. Use the Workflows API to manage workflows programmatically.
+
+## Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/v1/workflows` | List workflows |
+| `GET` | `/v1/workflows/{id}` | Get a workflow |
+| `POST` | `/v1/workflows` | Create a workflow |
+| `PUT` | `/v1/workflows/{id}` | Update a workflow |
+| `DELETE` | `/v1/workflows/{id}` | Delete a workflow |
+
+---
+
+## List workflows
+
+```
+GET https://api.pipedream.com/v1/workflows
+```
+
+Returns all workflows owned by the authenticated user or organization.
+
+### Query parameters
+
+<ParamField query="org_id" type="string">
+  Filter by organization ID.
+</ParamField>
+
+<ParamField query="after" type="string">
+  Return workflows after this cursor (for pagination).
+</ParamField>
+
+<ParamField query="before" type="string">
+  Return workflows before this cursor (for pagination).
+</ParamField>
+
+<ParamField query="limit" type="number">
+  Maximum number of workflows to return.
+</ParamField>
+
+### Response
+
+<ResponseField name="data" type="array">
+  Array of workflow objects.
+  <Expandable title="Workflow object">
+    <ResponseField name="id" type="string">
+      Unique workflow identifier, prefixed with `p_`.
+    </ResponseField>
+    <ResponseField name="name" type="string">
+      Human-readable name of the workflow.
+    </ResponseField>
+    <ResponseField name="active" type="boolean">
+      Whether the workflow is currently active.
+    </ResponseField>
+    <ResponseField name="created_at" type="string">
+      ISO 8601 timestamp of when the workflow was created.
+    </ResponseField>
+    <ResponseField name="updated_at" type="string">
+      ISO 8601 timestamp of the last update.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="page_info" type="object">
+  Pagination metadata.
+  <Expandable title="page_info fields">
+    <ResponseField name="total_count" type="number">
+      Total number of workflows available.
+    </ResponseField>
+    <ResponseField name="count" type="number">
+      Number of workflows in the current page.
+    </ResponseField>
+    <ResponseField name="start_cursor" type="string">
+      Cursor for the first record in the current page.
+    </ResponseField>
+    <ResponseField name="end_cursor" type="string">
+      Cursor for the last record in the current page.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Example
+
+```bash
+curl https://api.pipedream.com/v1/workflows \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+---
+
+## Get a workflow
+
+```
+GET https://api.pipedream.com/v1/workflows/{id}
+```
+
+### Path parameters
+
+<ParamField path="id" type="string" required>
+  The workflow ID, prefixed with `p_`.
+</ParamField>
+
+### Response
+
+<ResponseField name="data" type="object">
+  The workflow object. Fields are the same as in the list response.
+</ResponseField>
+
+### Example
+
+```bash
+curl https://api.pipedream.com/v1/workflows/p_abc123 \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+---
+
+## Create a workflow
+
+```
+POST https://api.pipedream.com/v1/workflows
+```
+
+### Request body
+
+<ParamField body="org_id" type="string">
+  The organization ID to create the workflow under. Omit to create the workflow under your personal account.
+</ParamField>
+
+<ParamField body="steps" type="array" required>
+  Array of step objects that define the workflow logic.
+</ParamField>
+
+<ParamField body="name" type="string">
+  Human-readable name for the workflow.
+</ParamField>
+
+### Response
+
+Returns the created workflow object nested under `data`.
+
+### Example
+
+```bash
+curl -X POST https://api.pipedream.com/v1/workflows \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "My New Workflow",
+    "steps": []
+  }'
+```
+
+---
+
+## Update a workflow
+
+```
+PUT https://api.pipedream.com/v1/workflows/{id}
+```
+
+### Path parameters
+
+<ParamField path="id" type="string" required>
+  The workflow ID.
+</ParamField>
+
+### Request body
+
+<ParamField body="name" type="string">
+  New name for the workflow.
+</ParamField>
+
+<ParamField body="active" type="boolean">
+  Set to `true` to activate the workflow, `false` to deactivate.
+</ParamField>
+
+<ParamField body="steps" type="array">
+  Updated array of step objects.
+</ParamField>
+
+### Response
+
+Returns the updated workflow object nested under `data`.
+
+### Example
+
+```bash
+curl -X PUT https://api.pipedream.com/v1/workflows/p_abc123 \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"active": false}'
+```
+
+---
+
+## Delete a workflow
+
+```
+DELETE https://api.pipedream.com/v1/workflows/{id}
+```
+
+### Path parameters
+
+<ParamField path="id" type="string" required>
+  The workflow ID.
+</ParamField>
+
+### Response
+
+Returns `204 No Content` on success.
+
+### Example
+
+```bash
+curl -X DELETE https://api.pipedream.com/v1/workflows/p_abc123 \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+<Warning>
+  Deleting a workflow is permanent and cannot be undone.
+</Warning>

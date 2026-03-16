@@ -1,0 +1,108 @@
+---
+title: SDK installation
+description: Install and import the Pipedream TypeScript SDK for server-side and browser-side use.
+---
+
+The `@pipedream/sdk` package provides both a server-side client for your Node.js backend and a browser-side client for your frontend. The same package name is used for both; you select the correct entry point at import time.
+
+## Install
+
+<Tabs>
+  <Tab title="npm">
+    ```bash
+    npm install @pipedream/sdk
+    ```
+  </Tab>
+  <Tab title="pnpm">
+    ```bash
+    pnpm add @pipedream/sdk
+    ```
+  </Tab>
+  <Tab title="yarn">
+    ```bash
+    yarn add @pipedream/sdk
+    ```
+  </Tab>
+</Tabs>
+
+## Entry points
+
+The package ships two separate entry points to prevent server-side credentials from leaking into browser bundles.
+
+| Entry point | Use in |
+|---|---|
+| `@pipedream/sdk/server` | Node.js servers, edge functions, Next.js server actions |
+| `@pipedream/sdk/browser` | React, Vue, vanilla browser JS |
+
+### Server (Node.js)
+
+```typescript
+import { createBackendClient } from "@pipedream/sdk/server";
+```
+
+### Browser
+
+```typescript
+import { createFrontendClient } from "@pipedream/sdk/browser";
+```
+
+<Warning>
+  Import only from `@pipedream/sdk/browser` in code that runs in the browser. The server entry point contains OAuth credential handling that must never be exposed client-side.
+</Warning>
+
+## CommonJS
+
+If your project uses CommonJS modules, import from the root package. The SDK detects the environment and loads the appropriate code.
+
+```javascript
+const { createClient } = require("@pipedream/sdk");
+```
+
+## TypeScript support
+
+The SDK is written in TypeScript and ships with full type definitions. No separate `@types` package is needed.
+
+```typescript
+import type {
+  Account,
+  App,
+  ConnectTokenResponse,
+  RunActionOpts,
+  DeployTriggerOpts,
+} from "@pipedream/sdk/server";
+```
+
+## Environment variables
+
+Set the following environment variables in your server environment. Do not commit secrets to version control.
+
+```bash
+PIPEDREAM_CLIENT_ID=your_client_id
+PIPEDREAM_CLIENT_SECRET=your_client_secret
+PIPEDREAM_PROJECT_ID=proj_abc123
+```
+
+For the React package, also set:
+
+```bash
+PIPEDREAM_ALLOWED_ORIGINS=["https://yourapp.com","http://localhost:3000"]
+```
+
+## Debugging
+
+Set `PD_SDK_DEBUG=true` in your server environment to log all Connect API requests and responses. Sensitive fields are automatically redacted.
+
+```bash
+PD_SDK_DEBUG=true node server.js
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Backend client" icon="server" href="/connect/sdk/backend-client">
+    Create Connect tokens, run actions, and manage connected accounts from your server.
+  </Card>
+  <Card title="Frontend client" icon="browser" href="/connect/sdk/frontend-client">
+    Launch OAuth flows and interact with the Connect API from the browser.
+  </Card>
+</CardGroup>

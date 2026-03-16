@@ -1,0 +1,69 @@
+---
+title: "Security and privacy"
+description: "How Pipedream handles data security, credential storage, compliance, and vulnerability disclosure."
+---
+
+Pipedream is built for developers working with sensitive data and third-party credentials. This page describes the security controls and privacy practices in place on the platform.
+
+<Note>
+The full Pipedream privacy policy is at [pipedream.com/privacy](https://pipedream.com/privacy). The security documentation is at [pipedream.com/docs/privacy-and-security](https://pipedream.com/docs/privacy-and-security).
+</Note>
+
+## Compliance
+
+<CardGroup cols={2}>
+  <Card title="SOC 2 Type 2" icon="shield-check">
+    Pipedream has demonstrated SOC 2 compliance. A SOC 2 Type 2 report is available to Business and Enterprise customers upon request.
+  </Card>
+  <Card title="GDPR" icon="lock">
+    Pipedream's data handling practices are designed to support GDPR compliance. See the [privacy policy](https://pipedream.com/privacy) for details.
+  </Card>
+</CardGroup>
+
+To request a SOC 2 Type 2 report, email [support@pipedream.com](mailto:support@pipedream.com).
+
+## Credential and secret storage
+
+<AccordionGroup>
+  <Accordion title="OAuth tokens and API keys">
+    OAuth access tokens and API keys connected through Pipedream are **encrypted at rest**. Pipedream stores credentials in an encrypted secrets store and does not expose raw credential values in the UI after initial connection.
+  </Accordion>
+  <Accordion title="Environment variables">
+    Environment variables (used to store secrets in workflows and event sources) are **encrypted with AES-256** at rest. They are injected into the execution environment at runtime and are not logged or exposed in execution records.
+  </Accordion>
+  <Accordion title="Connected accounts">
+    When you connect a third-party app via OAuth, Pipedream manages the token lifecycle — including refresh — on your behalf. You can revoke a connected account at any time from the Pipedream dashboard, which deletes the stored credentials.
+  </Accordion>
+</AccordionGroup>
+
+## Execution isolation
+
+Each workflow execution runs in an **isolated environment**. Code and data from one user's workflow are not accessible to another user's workflow. Execution environments are ephemeral — they are created for each run and destroyed when execution completes.
+
+## Data handling
+
+- **Event payloads** sent to HTTP triggers are processed in Pipedream's infrastructure and retained for the event history window (up to 100 events per source).
+- **Execution logs** (step inputs and outputs) are stored and accessible in the workflow inspector. Sensitive values that appear in logs are your responsibility to redact or avoid logging.
+- **Workflow code** is stored securely and is only accessible to the authenticated owner.
+
+<Warning>
+Avoid logging sensitive values (passwords, tokens, PII) in workflow step outputs or `console.log` calls. Execution logs are visible to all members of a workspace.
+</Warning>
+
+## Network security
+
+- All data in transit between Pipedream services and external APIs is encrypted using **TLS**.
+- HTTP trigger endpoints are served over HTTPS.
+- Outbound requests from workflow code are made over the public internet. Use IP allowlisting only where your external services require it — note that Pipedream's egress IP addresses may change; consult the [platform limits docs](https://pipedream.com/docs/limits) for current ranges.
+
+## Reporting a vulnerability
+
+If you discover a suspected security vulnerability in Pipedream, contact the security team directly:
+
+**Email:** [security@pipedream.com](mailto:security@pipedream.com)
+
+Do not open a public GitHub issue for security vulnerabilities. The Pipedream security team will acknowledge your report and work with you on disclosure. For full details, see [pipedream.com/docs/privacy-and-security/#reporting-a-vulnerability](https://pipedream.com/docs/privacy-and-security/#reporting-a-vulnerability).
+
+## Questions
+
+For general security questions about the platform, email [support@pipedream.com](mailto:support@pipedream.com).

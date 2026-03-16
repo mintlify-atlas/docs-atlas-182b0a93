@@ -1,0 +1,250 @@
+---
+title: Creating actions
+description: Build, test, and publish a custom Pipedream action step by step.
+---
+
+This guide walks through building a production-quality action: one that connects to an authenticated app, accepts user input with async options, makes an API call, and exports useful data downstream.
+
+## Prerequisites
+
+- [Pipedream CLI](https://pipedream.com/docs/cli/reference/) installed and authenticated
+- A Pipedream account
+
+## Step 1: Define the action skeleton
+
+Create a new file following the naming convention `<app-slug>-<action-name>.mjs`:
+
+```javascript
+// github-create-issue.mjs
+export default {
+  key: "github-create-issue",
+  name: "Create Issue",
+  description: "Create a new issue in a GitHub repository. [See the documentation](https://docs.github.com/en/rest/issues/issues#create-an-issue)",
+  version: "0.0.1",
+  type: "action",
+  props: {},
+  async run({ $ }) {},
+};
+```
+
+Key naming rules:
+- `key` must be unique across Pipedream. For registry components, prefix with the app slug: `github-create-issue`.
+- `version` follows semver. Bump the patch version on every published change.
+- `description` supports Markdown. Link to the upstream API docs whenever possible.
+
+## Step 2: Add an app prop
+
+Connect a Pipedream-integrated app by adding a prop with `type: "app"`:
+
+```javascript
+import github from "../../github.app.mjs";
+
+export default {
+  key: "github-create-issue",
+  name: "Create Issue",
+  version: "0.0.1",
+  type: "action",
+  props: {
+    github, // shorthand for { type: "app", app: "github", ... }
+  },
+  async run({ $ }) {
+    // this.github.$auth.oauth_access_token is now available
+  },
+};
+```
+
+The `github` object imported above is the app component (`github.app.mjs`). Spreading it as a prop makes all of its `methods` available via `this.github.*` and injects the connected account's credentials into `this.github.$auth`.
+
+## Step 3: Add input props
+
+Add props for each user input. Reference `propDefinitions` from the app component where possible to avoid duplicating option-loading logic:
+
+```javascript
+import github from "../../github.app.mjs";
+
+export default {
+  key: "github-create-issue",
+  name: "Create Issue",
+  version: "0.0.1",
+  type: "action",
+  props: {
+    github,
+    repoFullname: {
+      propDefinition: [github, "repoFullname"],
+    },
+    title: {
+      type: "string",
+      label: "Title",
+      description: "The title of the issue.",
+    },
+    body: {
+      type: "string",
+      label: "Body",
+      description: "The body text of the issue.",
+      optional: true,
+    },
+  },
+  async run({ $ }) {},
+};
+```
+
+## Step 4: Implement `run`
+
+Call the API and export a summary and return value:
+
+```javascript
+import { axios } from "@pipedream/platform";
+import github from "../../github.app.mjs";
+
+export default {
+  key: "github-create-issue",
+  name: "Create Issue",
+  description: "Create a new issue in a GitHub repository.",
+  version: "0.0.1",
+  type: "action",
+  props: {
+    github,
+    repoFullname: {
+      propDefinition: [github, "repoFullname"],
+    },
+    title: {
+      type: "string",
+      label: "Title",
+      description: "The title of the issue.",
+    },
+    body: {
+      type: "string",
+      label: "Body",
+      description: "The body text of the issue.",
+      optional: true,
+    },
+  },
+  async run({ $ }) {
+    const response = await axios($, {
+      method: "POST",
+      url: `https://api.github.com/repos/${this.repoFullname}/issues`,
+      headers: {
+        Authorization: `token ${this.github.$auth.oauth_access_token}`,
+        "X-GitHub-Api-Version": "2022-11-28",
+      },
+      data: {
+        title: this.title,
+        body: this.body,
+      },
+    });
+
+    $.export("$summary", `Successfully created issue (ID: ${response.id})`);
+
+    return response;
+  },
+};
+```
+
+<Tip>
+Always set `$.export("$summary", ...)` with a concise human-readable description of what the action did. This string appears in the workflow step list and in AI-generated workflow descriptions.
+</Tip>
+
+## Step 5: Add methods for reusability
+
+Extract API call logic into `methods` so it can be shared across multiple components and tested independently:
+
+```javascript
+import { axios } from "@pipedream/platform";
+import github from "../../github.app.mjs";
+
+export default {
+  key: "github-create-issue",
+  version: "0.0.1",
+  type: "action",
+  props: {
+    github,
+    repoFullname: { propDefinition: [github, "repoFullname"] },
+    title: { type: "string", label: "Title" },
+    body: { type: "string", label: "Body", optional: true },
+  },
+  methods: {
+    async createIssue({ repoFullname, data }) {
+      return axios(this, {
+        method: "POST",
+        url: `https://api.github.com/repos/${repoFullname}/issues`,
+        headers: {
+          Authorization: `token ${this.github.$auth.oauth_access_token}`,
+          "X-GitHub-Api-Version": "2022-11-28",
+        },
+        data,
+      });
+    },
+  },
+  async run({ $ }) {
+    const response = await this.createIssue({
+      repoFullname: this.repoFullname,
+      data: {
+        title: this.title,
+        body: this.body,
+      },
+    });
+
+    $.export("$summary", `Successfully created issue (ID: ${response.id})`);
+    return response;
+  },
+};
+```
+
+## Step 6: Test and publish
+
+<Steps>
+  <Step title="Publish to your account">
+    ```bash
+    pd publish github-create-issue.mjs
+    ```
+
+    The action is immediately available in workflows under **My Actions**.
+  </Step>
+
+  <Step title="Test in a workflow">
+    Add the action to a new workflow. Connect a GitHub account, fill in the repository and title, then run the workflow. Review the step output to confirm the API response looks correct.
+  </Step>
+
+  <Step title="Iterate and re-publish">
+    Make changes to the file, bump the version number, and re-run `pd publish`. Existing workflows pinned to older versions are unaffected until you update them.
+  </Step>
+</Steps>
+
+## Error handling
+
+Throw a `ConfigurationError` from `@pipedream/platform` to surface a user-friendly error when the action cannot be configured (as opposed to a runtime API error):
+
+```javascript
+import { axios, ConfigurationError } from "@pipedream/platform";
+
+async run({ $ }) {
+  if (!this.repoFullname.includes("/")) {
+    throw new ConfigurationError(
+      "Repository must be in the format `owner/repo`."
+    );
+  }
+
+  // proceed with API call
+},
+```
+
+`ConfigurationError` is shown inline in the Pipedream UI without a full stack trace, which keeps the error message readable for non-developer users.
+
+## Handling destructured props in `run`
+
+When passing `this` properties as an object to an API call, exclude internal Pipedream props like the app object and any alert props:
+
+```javascript
+async run({ $ }) {
+  const {
+    github,       // app prop — not a data field
+    infoBox,      // alert prop — not a data field
+    repoFullname, // separate top-level param
+    ...data       // everything else goes in the request body
+  } = this;
+
+  const response = await github.createIssue({ repoFullname, data });
+  $.export("$summary", `Successfully created issue (ID: ${response.id})`);
+  return response;
+},
+```

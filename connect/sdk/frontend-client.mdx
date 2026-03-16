@@ -1,0 +1,137 @@
+---
+title: Frontend client
+description: Browser-side Pipedream SDK client — launch OAuth flows and interact with the Connect API from your frontend.
+---
+
+The frontend client runs in the browser and lets your users connect their accounts through Pipedream's hosted OAuth flow. It never exposes your OAuth client secret — it uses short-lived Connect tokens issued by your server to authenticate API calls.
+
+## Create the client
+
+```typescript
+import { createFrontendClient } from "@pipedream/sdk/browser";
+
+const client = createFrontendClient({
+  externalUserId: "user-123",
+  tokenCallback: async ({ externalUserId }) => {
+    // Call your server to get a Connect token
+    const res = await fetch("/api/pipedream-token", {
+      method: "POST",
+      body: JSON.stringify({ externalUserId }),
+      headers: { "Content-Type": "application/json" },
+    });
+    return res.json(); // { token, expires_at }
+  },
+});
+```
+
+<ParamField body="externalUserId" type="string">
+  Your user's ID. Passed to `tokenCallback` when a new token is needed.
+</ParamField>
+
+<ParamField body="tokenCallback" type="function">
+  An async function that returns a Connect token response from your server. Called automatically when no valid token is available. The function receives `{ externalUserId }` and must return `{ token, expires_at }`.
+</ParamField>
+
+<Note>
+  The client caches the token and only calls `tokenCallback` again when the token is expired or has been used to create a connected account.
+</Note>
+
+## Connect an account
+
+Call `connectAccount` to open Pipedream's hosted OAuth flow in an iframe. The user completes the OAuth authorization and the iframe closes automatically.
+
+```typescript
+await client.connectAccount({
+  app: "slack",
+  onSuccess: ({ id }) => {
+    console.log("Connected! Account ID:", id);
+  },
+  onError: (err) => {
+    console.error("Connection failed:", err.message);
+  },
+  onClose: ({ successful, completed }) => {
+    if (!successful && !completed) {
+      console.log("User closed the dialog without connecting");
+    }
+  },
+});
+```
+
+<ParamField body="app" type="string" required>
+  The app's name slug (e.g. `"slack"`, `"github"`). Find it in the **Authentication** section on any app's page at [pipedream.com/apps](https://pipedream.com/apps).
+</ParamField>
+
+<ParamField body="oauthAppId" type="string">
+  Optional. The ID of a custom OAuth app configured in Pipedream, if you want users to connect using your own OAuth credentials.
+</ParamField>
+
+<ParamField body="onSuccess" type="function">
+  Called when the user successfully connects an account. Receives `{ id }` with the connected account's ID.
+</ParamField>
+
+<ParamField body="onError" type="function">
+  Called when an error occurs during the connection flow. Receives a `ConnectError` instance.
+</ParamField>
+
+<ParamField body="onClose" type="function">
+  Called when the iframe is closed, regardless of outcome. Receives `{ successful, completed }` booleans.
+  - `successful` — `true` if an account was connected.
+  - `completed` — `true` if the flow finished (success or error), `false` if the user closed the dialog early.
+</ParamField>
+
+## Get connected accounts
+
+Retrieve accounts connected by the current user.
+
+```typescript
+const { data: accounts } = await client.getAccounts({
+  app: "slack",
+});
+```
+
+<ParamField query="app" type="string">
+  Filter by app name slug.
+</ParamField>
+
+<ParamField query="oauth_app_id" type="string">
+  Filter by OAuth app ID.
+</ParamField>
+
+## Access the raw token
+
+Retrieve the current Connect token string directly, useful for passing to lower-level API calls.
+
+```typescript
+const token = client.rawToken();
+```
+
+Returns `undefined` if no token has been fetched yet.
+
+## Usage with React
+
+When using React, create the client outside the render cycle (or memoize it) and wrap your app in `FrontendClientProvider`:
+
+```tsx
+import { useMemo } from "react";
+import { createFrontendClient } from "@pipedream/sdk/browser";
+import { FrontendClientProvider } from "@pipedream/connect-react";
+import { fetchToken } from "./actions"; // server action
+
+export default function App() {
+  const client = useMemo(() =>
+    createFrontendClient({
+      externalUserId: "user-123",
+      tokenCallback: fetchToken,
+    }),
+    []
+  );
+
+  return (
+    <FrontendClientProvider client={client}>
+      {/* your components */}
+    </FrontendClientProvider>
+  );
+}
+```
+
+See the [React overview](/connect/react/overview) for full integration details.

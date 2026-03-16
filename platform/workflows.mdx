@@ -1,0 +1,229 @@
+---
+title: "Workflows"
+description: "Workflows are sequences of steps triggered by an event. Build automations that connect any API without managing infrastructure."
+---
+
+A workflow is the core unit of automation on Pipedream. It consists of a **trigger** that starts the workflow and one or more **steps** that run in order when the trigger fires.
+
+## Anatomy of a workflow
+
+```
+[ Trigger ] → [ Step 1 ] → [ Step 2 ] → [ Step 3 ]
+```
+
+- **Trigger** — defines what event starts the workflow (HTTP request, timer, app event, or email).
+- **Steps** — actions or custom code that execute sequentially. Each step has access to the outputs of all previous steps.
+- **Exports** — data a step produces and makes available to downstream steps.
+
+## Trigger types
+
+<Tabs>
+  <Tab title="HTTP / Webhook">
+    Pipedream generates a unique HTTPS endpoint for your workflow. Send any HTTP request to that URL to trigger the workflow.
+
+    The full request is available at `steps.trigger.event`:
+
+    ```javascript
+    export default defineComponent({
+      async run({ steps, $ }) {
+        const { body, headers, method, path, query } = steps.trigger.event;
+        console.log(body); // parsed request body
+      },
+    });
+    ```
+
+    To send a synchronous HTTP response back to the caller, use `$.respond()`:
+
+    ```javascript
+    export default defineComponent({
+      async run({ steps, $ }) {
+        $.respond({
+          status: 200,
+          body: { message: "ok" },
+        });
+      },
+    });
+    ```
+
+    <Note>`$.respond()` must be called from a step — not the trigger itself. The workflow must also have **Return a response from your workflow** enabled in the trigger settings.</Note>
+  </Tab>
+  <Tab title="Timer">
+    Run a workflow on a schedule. Supported formats:
+
+    - **Every N minutes/hours/days** — select from a preset interval
+    - **Cron expression** — full cron syntax (e.g., `0 9 * * 1-5` for weekdays at 9 AM UTC)
+
+    The timer event is available at `steps.trigger.event`:
+
+    ```javascript
+    export default defineComponent({
+      async run({ steps, $ }) {
+        const { timestamp, interval_seconds } = steps.trigger.event;
+        console.log(`Triggered at: ${timestamp}`);
+      },
+    });
+    ```
+  </Tab>
+  <Tab title="App events">
+    Watch for new data from a connected app. For example, trigger when:
+
+    - A new issue is opened on GitHub
+    - A new message arrives in a Slack channel
+    - A new row is added to a Google Sheet
+    - A new item appears in an RSS feed
+
+    Event sources handle polling and deduplication. Your workflow only runs for genuinely new events.
+
+    [Browse available event sources on pipedream.com/apps](https://pipedream.com/apps)
+  </Tab>
+  <Tab title="Email">
+    Pipedream generates a unique email address for your workflow. Inbound emails trigger the workflow with the parsed message — including `subject`, `from`, `to`, `text`, `html`, and `attachments` — available at `steps.trigger.event`.
+  </Tab>
+</Tabs>
+
+## Passing data between steps
+
+Each step can read exports from all previous steps through the `steps` object.
+
+```javascript
+// Step 1: fetch-user
+export default defineComponent({
+  async run({ steps, $ }) {
+    // Return value is exported as $return_value
+    return { userId: 42, name: "Alice" };
+  },
+});
+
+// Step 2: send-notification
+export default defineComponent({
+  async run({ steps, $ }) {
+    // Reference the previous step by name
+    const { userId, name } = steps["fetch-user"].$return_value;
+    console.log(`Notifying user ${name} (ID: ${userId})`);
+  },
+});
+```
+
+You can also export named values with `$.export()`:
+
+```javascript
+export default defineComponent({
+  async run({ steps, $ }) {
+    $.export("userId", 42);
+    $.export("name", "Alice");
+    // Access in later steps as steps.stepName.userId, steps.stepName.name
+  },
+});
+```
+
+## Controlling workflow execution
+
+### Ending a workflow early
+
+Use `$.flow.exit()` to stop the workflow at any step without raising an error. This is useful for filtering events you don't want to process:
+
+```javascript
+export default defineComponent({
+  async run({ steps, $ }) {
+    const { action } = steps.trigger.event.body;
+
+    // Only process "created" events
+    if (action !== "created") {
+      $.flow.exit(`Skipping event with action: ${action}`);
+    }
+
+    // ... process the event
+  },
+});
+```
+
+### Error handling
+
+If a step throws an unhandled error, the workflow stops and Pipedream records the error in the event history. You can configure **error notifications** to receive an email or trigger another workflow when a failure occurs.
+
+To catch errors within a step:
+
+```javascript
+export default defineComponent({
+  async run({ steps, $ }) {
+    try {
+      const result = await riskyOperation();
+      return result;
+    } catch (err) {
+      console.error("Operation failed:", err.message);
+      // Optionally re-throw or handle gracefully
+      throw err;
+    }
+  },
+});
+```
+
+## Concurrency and rate limiting
+
+By default, Pipedream runs workflow executions concurrently. You can configure the following in **Settings**:
+
+- **Concurrency** — limit how many executions run at the same time. Set to `1` for strictly serial execution.
+- **Rate limit** — cap how many times the workflow can execute per second, minute, or hour.
+- **Execution queue** — queue incoming events when the concurrency limit is reached, instead of dropping them.
+
+<Tip>
+Use concurrency controls when your workflow writes to a shared resource (a database, a file, an API with rate limits) and ordering or isolation matters.
+</Tip>
+
+## Workflow settings
+
+| Setting | Description |
+|---------|-------------|
+| **Name** | Human-readable label for the workflow |
+| **Timeout** | Maximum execution time per event (default: 30 seconds; configurable up to 12 minutes on paid plans) |
+| **Error notifications** | Email alerts or a linked error workflow when a step fails |
+| **Execution controls** | Concurrency, rate limits, and queue settings |
+| **Environment variables** | Key-value secrets available in all steps as `process.env.KEY` |
+
+## Event history
+
+Every workflow execution is recorded in the **Event History** tab. For each event you can inspect:
+
+- The raw trigger event (request body, headers, timer metadata, etc.)
+- Each step's exports and return value
+- Logs printed with `console.log()`
+- Errors and stack traces
+- Total execution duration
+
+<Note>
+Event history retention varies by plan. Free tier retains the last 100 events per workflow.
+</Note>
+
+## Environment variables
+
+Store secrets as environment variables in your [Pipedream account settings](https://pipedream.com/settings/env-vars). They are available in all workflows:
+
+```javascript
+export default defineComponent({
+  async run({ steps, $ }) {
+    const apiKey = process.env.MY_API_KEY;
+    // ...
+  },
+});
+```
+
+<Warning>
+Do not hardcode secrets directly in step code. Use environment variables or connected accounts instead.
+</Warning>
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Event sources" icon="bolt" href="/platform/event-sources">
+    Trigger workflows from app events with pre-built sources.
+  </Card>
+  <Card title="Actions" icon="zap" href="/platform/actions">
+    Add pre-built action steps to your workflow.
+  </Card>
+  <Card title="Custom code" icon="code" href="/platform/custom-code">
+    Write Node.js, Python, Go, or Bash in any step.
+  </Card>
+  <Card title="Destinations" icon="database" href="/platform/destinations">
+    Asynchronously deliver events to S3, Snowflake, and more.
+  </Card>
+</CardGroup>

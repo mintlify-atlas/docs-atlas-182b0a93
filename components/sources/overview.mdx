@@ -1,0 +1,161 @@
+---
+title: Sources overview
+description: Event sources trigger Pipedream workflows. Learn how sources work, the different source types, and when to use each one.
+---
+
+An event source is a Pipedream component with `type: "source"`. It watches for new data from a service and emits events that trigger any workflows connected to it. Sources can expose an HTTP endpoint, run on a timer, or use both.
+
+## How sources work
+
+When a source emits an event, every workflow that uses that source as its trigger is executed with the event payload. You can also consume source events directly via the [Pipedream REST API](https://pipedream.com/docs/api/rest/) or a real-time [SSE stream](https://pipedream.com/docs/api/sse/) without a workflow.
+
+<Steps>
+  <Step title="Source receives data">
+    Data arrives via an incoming HTTP request, a timer firing, or a polling interval.
+  </Step>
+  <Step title="Source calls this.$emit()">
+    Your `run` method processes the data and calls `this.$emit(event, metadata)` for each new item.
+  </Step>
+  <Step title="Pipedream routes the event">
+    Pipedream fans the emitted event out to all connected workflows.
+  </Step>
+  <Step title="Workflows execute">
+    Each connected workflow runs with the event payload in `steps.trigger.event`.
+  </Step>
+</Steps>
+
+## Source types
+
+<CardGroup cols={3}>
+  <Card title="HTTP sources" icon="globe" href="/components/sources/http">
+    Expose a unique webhook URL. Emit events on every incoming request.
+  </Card>
+  <Card title="Timer sources" icon="clock" href="/components/sources/timer">
+    Poll an API on a schedule using cron expressions or interval seconds.
+  </Card>
+  <Card title="Custom sources" icon="code" href="/components/sources/custom">
+    Combine both interfaces, use lifecycle hooks, and build complex event sources.
+  </Card>
+</CardGroup>
+
+## Minimal source example
+
+Every source needs a `type: "source"`, at least one interface prop (`$.interface.http` or `$.interface.timer`), and a `run` method that calls `this.$emit()`:
+
+```javascript
+export default {
+  key: "my-http-source",
+  name: "My HTTP Source",
+  version: "0.0.1",
+  type: "source",
+  props: {
+    http: "$.interface.http",
+  },
+  run(event) {
+    this.$emit(event, {
+      summary: `${event.method} ${event.path}`,
+    });
+  },
+};
+```
+
+## The `$emit` method
+
+`this.$emit(event, metadata)` is the core of every source. The first argument is the event payload — any JSON-serializable value. The second argument is optional metadata:
+
+```javascript
+this.$emit(
+  { id: 42, title: "New item" },
+  {
+    id: 42,             // Unique event ID; required when dedupe is set
+    summary: "Item 42", // Short label shown in the event list
+    ts: Date.now(),     // Millisecond timestamp for ordering
+  }
+);
+```
+
+## Deduplication
+
+Set `dedupe` on your source to avoid emitting the same event twice. This is especially important for polling sources that may see the same items across multiple runs:
+
+```javascript
+export default {
+  key: "my-polling-source",
+  version: "0.0.1",
+  type: "source",
+  dedupe: "unique",  // "unique" | "greatest" | "last"
+  props: {
+    timer: {
+      type: "$.interface.timer",
+      default: { intervalSeconds: 300 },
+    },
+    db: "$.service.db",
+  },
+  async run() {
+    const items = await this.fetchItems();
+    for (const item of items) {
+      this.$emit(item, {
+        id: item.id,  // required when dedupe is set
+        summary: item.name,
+      });
+    }
+  },
+};
+```
+
+| Strategy | When to use |
+|---|---|
+| `"unique"` | Items have stable IDs. Never emit the same ID twice. |
+| `"greatest"` | Items have monotonically increasing IDs (e.g., auto-increment database IDs). |
+| `"last"` | Only care if the most recent item changed (e.g., status polling). |
+
+## Lifecycle hooks
+
+Sources support three lifecycle hooks:
+
+- **`deploy`** — Called once when the source is first deployed. Use it to emit a backfill of historical events (up to 50) so connected workflows have data to test with immediately.
+- **`activate`** — Called every time the source is enabled. Use it to register webhooks with third-party APIs.
+- **`deactivate`** — Called every time the source is disabled or deleted. Use it to delete webhooks.
+
+```javascript
+hooks: {
+  async deploy() {
+    // Emit 5 historical events so the workflow can be tested immediately
+    const items = await this.getRecentItems({ limit: 5 });
+    for (const item of items.reverse()) {
+      this.$emit(item, { id: item.id, summary: item.title });
+    }
+  },
+  async activate() {
+    const { id } = await this.createWebhook({ url: this.http.endpoint });
+    this.db.set("webhookId", id);
+  },
+  async deactivate() {
+    await this.deleteWebhook({ id: this.db.get("webhookId") });
+  },
+},
+```
+
+## Persisting state with `$.service.db`
+
+Polling sources need to track state between runs — for example, the ID of the last item seen. Use the `db` prop for this:
+
+```javascript
+props: {
+  db: "$.service.db",
+},
+async run() {
+  const lastId = this.db.get("lastId") ?? 0;
+  const items = await this.fetchItemsSince(lastId);
+
+  for (const item of items) {
+    this.$emit(item, { id: item.id, summary: item.title });
+  }
+
+  if (items.length) {
+    this.db.set("lastId", Math.max(...items.map((i) => i.id)));
+  }
+},
+```
+
+The `db` prop is a simple key-value store scoped to the source instance. Values persist across invocations.

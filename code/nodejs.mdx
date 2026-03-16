@@ -1,0 +1,277 @@
+---
+title: "Node.js"
+description: "Run any Node.js code in a workflow step. Import npm packages, access connected apps, and pass data between steps."
+---
+
+Node.js steps let you write custom JavaScript logic in your Pipedream workflows. You can import any npm package, connect to any of Pipedream's 1,000+ integrated apps, and pass data to and from other steps.
+
+## Writing your first Node.js step
+
+Every Node.js step uses `defineComponent` and exports a default component with a `run` method:
+
+```javascript
+export default defineComponent({
+  async run({ steps, $ }) {
+    return "Hello from Node.js!"
+  }
+})
+```
+
+The `run` method receives a context object with two properties:
+
+- `steps` — data exported from previous steps in the workflow
+- `$` — helper functions for exporting data and sending HTTP responses
+
+## Importing npm packages
+
+Declare imports at the top of your step. Pipedream parses your code and automatically installs the required packages — no `package.json` or `npm install` required.
+
+```javascript
+import axios from "axios"
+import _ from "lodash"
+import { format } from "date-fns"
+
+export default defineComponent({
+  async run({ steps, $ }) {
+    const response = await axios.get("https://api.example.com/data")
+    const grouped = _.groupBy(response.data, "category")
+    return grouped
+  }
+})
+```
+
+<Note>
+  Pipedream uses the latest version of a package unless you pin a specific version with `import axios from "axios@0.27.2"`.
+</Note>
+
+## Accessing data from previous steps
+
+Data exported by previous steps is available via the `steps` object. Reference a step's return value using `steps.stepName.$return_value`:
+
+```javascript
+export default defineComponent({
+  async run({ steps, $ }) {
+    // Access the return value of a step named "fetch_user"
+    const user = steps.fetch_user.$return_value
+
+    // Access a named export from a step named "parse_data"
+    const items = steps.parse_data.items
+
+    return {
+      userId: user.id,
+      itemCount: items.length,
+    }
+  }
+})
+```
+
+The trigger event is also available as `steps.trigger.event`:
+
+```javascript
+export default defineComponent({
+  async run({ steps, $ }) {
+    const { body, headers } = steps.trigger.event
+    return body
+  }
+})
+```
+
+## Exporting data
+
+Anything you return from the `run` method is exported as the step's `$return_value` and available to downstream steps.
+
+You can also export named values using `$.export()`:
+
+```javascript
+export default defineComponent({
+  async run({ steps, $ }) {
+    const users = await fetchUsers()
+    const activeUsers = users.filter(u => u.active)
+
+    // Export named values accessible as steps.this_step.activeCount
+    $.export("activeCount", activeUsers.length)
+    $.export("activeUsers", activeUsers)
+
+    // The return value is accessible as steps.this_step.$return_value
+    return {
+      total: users.length,
+      active: activeUsers.length,
+    }
+  }
+})
+```
+
+## Connecting to apps
+
+Connect any of Pipedream's integrated apps to your code step. Add an `app` prop to access its authentication credentials.
+
+### OAuth apps
+
+For apps that use OAuth, the access token is available via `this.appName.$auth.oauth_access_token`:
+
+```javascript
+import { WebClient } from "@slack/web-api"
+
+export default defineComponent({
+  props: {
+    slack: {
+      type: "app",
+      app: "slack",
+    },
+  },
+  async run({ steps, $ }) {
+    const web = new WebClient(this.slack.$auth.oauth_access_token)
+
+    return await web.chat.postMessage({
+      text: "Hello from Pipedream!",
+      channel: "#general",
+    })
+  },
+})
+```
+
+### API key apps
+
+For apps that use API keys, credentials are available as properties on `$auth`:
+
+```javascript
+import { axios } from "@pipedream/platform"
+
+export default defineComponent({
+  props: {
+    openai: {
+      type: "app",
+      app: "openai",
+    },
+  },
+  async run({ steps, $ }) {
+    return await axios($, {
+      method: "POST",
+      url: "https://api.openai.com/v1/chat/completions",
+      headers: {
+        Authorization: `Bearer ${this.openai.$auth.api_key}`,
+      },
+      data: {
+        model: "gpt-4o",
+        messages: [{ role: "user", content: "Hello!" }],
+      },
+    })
+  },
+})
+```
+
+## Using the Pipedream axios helper
+
+Pipedream provides a custom `axios` wrapper that adds automatic error logging and debug support. Import it from `@pipedream/platform`:
+
+```javascript
+import { axios } from "@pipedream/platform"
+
+export default defineComponent({
+  async run({ steps, $ }) {
+    const data = await axios($, {
+      method: "GET",
+      url: "https://api.example.com/items",
+      headers: {
+        "Authorization": "Bearer my-token",
+      },
+    })
+    return data
+  }
+})
+```
+
+Pass `debug: true` to export the request config and response to the step for troubleshooting:
+
+```javascript
+import { axios } from "@pipedream/platform"
+
+export default defineComponent({
+  async run({ steps, $ }) {
+    return await axios($, {
+      url: "https://api.example.com/data",
+      debug: true, // Exports debug_config and debug_response
+    })
+  }
+})
+```
+
+## Sending HTTP responses
+
+When your workflow is triggered by an HTTP request, use `$.respond()` to return a custom response to the caller:
+
+```javascript
+export default defineComponent({
+  async run({ steps, $ }) {
+    const { body } = steps.trigger.event
+
+    await $.respond({
+      status: 200,
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: {
+        message: "Received!",
+        id: body.id,
+      },
+    })
+  }
+})
+```
+
+<Warning>
+  `$.respond()` only works when your workflow uses an HTTP trigger. To use it, enable **Return a response from your workflow** in the HTTP trigger settings.
+</Warning>
+
+## Ending a workflow early
+
+Call `$.flow.exit()` to stop workflow execution at any point without throwing an error:
+
+```javascript
+export default defineComponent({
+  async run({ steps, $ }) {
+    const event = steps.trigger.event
+
+    if (!event.body.userId) {
+      $.flow.exit("No userId in payload, stopping workflow")
+    }
+
+    // Continue processing...
+    return processUser(event.body.userId)
+  }
+})
+```
+
+## Async and promises
+
+All `run` methods support `async/await`. You can also use Promise chains:
+
+```javascript
+import axios from "axios"
+
+export default defineComponent({
+  async run({ steps, $ }) {
+    const [users, products] = await Promise.all([
+      axios.get("https://api.example.com/users").then(r => r.data),
+      axios.get("https://api.example.com/products").then(r => r.data),
+    ])
+
+    return { users, products }
+  }
+})
+```
+
+## Logging
+
+Use `console.log()` to write to the step logs, visible in the workflow execution details:
+
+```javascript
+export default defineComponent({
+  async run({ steps, $ }) {
+    console.log("Starting processing...")
+    const data = steps.trigger.event.body
+    console.log("Received payload:", JSON.stringify(data, null, 2))
+    return data
+  }
+})
+```

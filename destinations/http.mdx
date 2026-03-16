@@ -1,0 +1,153 @@
+---
+title: "HTTP"
+description: "Send HTTP requests to any URL from a workflow using $send.http()."
+---
+
+The HTTP destination sends an HTTP request to a URL you specify. Use it to forward events to webhooks, notify external services, or integrate with any HTTP API.
+
+## Usage
+
+```javascript
+export default defineComponent({
+  async run({ steps, $ }) {
+    $send.http({
+      method: "POST",
+      url: "https://hooks.example.com/ingest",
+      data: {
+        message: "Hello from Pipedream",
+        event: steps.trigger.event.body,
+      },
+    })
+  }
+})
+```
+
+## Parameters
+
+<ParamField body="method" type="string" required>
+  The HTTP method to use. Must be one of: `GET`, `HEAD`, `POST`, `PUT`, `DELETE`, `CONNECT`, `OPTIONS`, `TRACE`, `PATCH`. Must be uppercase.
+</ParamField>
+
+<ParamField body="url" type="string" required>
+  The full URL to send the request to, including the scheme (for example, `https://api.example.com/webhook`).
+</ParamField>
+
+<ParamField body="data" type="string | object">
+  The request body. Objects are serialized as JSON and the `Content-Type` header is set to `application/json` automatically.
+</ParamField>
+
+<ParamField body="headers" type="object">
+  Key-value pairs to include as request headers. Use this to pass authorization tokens, content type overrides, or any custom headers your endpoint requires.
+
+  ```javascript
+  headers: {
+    "Authorization": "Bearer my-token",
+    "X-Custom-Header": "custom-value",
+  }
+  ```
+</ParamField>
+
+<ParamField body="params" type="object">
+  Key-value pairs to append as query string parameters to the URL.
+
+  ```javascript
+  params: {
+    "api_key": "abc123",
+    "format": "json",
+  }
+  ```
+</ParamField>
+
+<ParamField body="auth" type="object">
+  HTTP Basic Authentication credentials. Pass an object with `username` and `password` properties. Pipedream encodes them and sets the `Authorization` header.
+
+  ```javascript
+  auth: {
+    username: "myuser",
+    password: "mypassword",
+  }
+  ```
+</ParamField>
+
+## Examples
+
+### Forward events to a webhook
+
+```javascript
+export default defineComponent({
+  async run({ steps, $ }) {
+    $send.http({
+      method: "POST",
+      url: "https://hooks.zapier.com/hooks/catch/abc123/xyz789",
+      data: steps.trigger.event.body,
+    })
+  }
+})
+```
+
+### Send with authentication headers
+
+```javascript
+export default defineComponent({
+  async run({ steps, $ }) {
+    $send.http({
+      method: "POST",
+      url: "https://api.example.com/events",
+      headers: {
+        "Authorization": `Bearer ${process.env.API_TOKEN}`,
+        "Content-Type": "application/json",
+        "X-Source": "pipedream",
+      },
+      data: {
+        timestamp: new Date().toISOString(),
+        payload: steps.trigger.event.body,
+      },
+    })
+  }
+})
+```
+
+### GET request with query parameters
+
+```javascript
+export default defineComponent({
+  async run({ steps, $ }) {
+    $send.http({
+      method: "GET",
+      url: "https://api.example.com/notify",
+      params: {
+        event_id: steps.trigger.event.body.id,
+        source: "pipedream",
+      },
+    })
+  }
+})
+```
+
+### Send with basic auth
+
+```javascript
+export default defineComponent({
+  async run({ steps, $ }) {
+    $send.http({
+      method: "POST",
+      url: "https://internal-api.example.com/ingest",
+      auth: {
+        username: process.env.API_USERNAME,
+        password: process.env.API_PASSWORD,
+      },
+      data: steps.trigger.event,
+    })
+  }
+})
+```
+
+## Delivery behavior
+
+`$send.http()` is **asynchronous**. Your step completes immediately after the call, and Pipedream queues the HTTP request for delivery. You cannot access the response in your workflow code.
+
+<Note>
+  If you need to use the response from an HTTP request in a downstream step, use `axios` or `fetch` in a code step instead of the HTTP destination.
+</Note>
+
+Pipedream retries failed deliveries with exponential backoff. Delivery failures are visible in your workflow's event history.

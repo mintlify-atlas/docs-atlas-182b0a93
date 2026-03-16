@@ -1,0 +1,158 @@
+---
+title: "Platform SDK overview"
+description: "Use the Pipedream Platform SDK to build server-side and browser-side integrations with the Pipedream Connect API."
+---
+
+The Pipedream Platform SDK (`@pipedream/sdk`) provides typed TypeScript clients for the Pipedream Connect API. It handles OAuth token management, request signing, and all API interactions so you don't need to call the REST API directly.
+
+## Packages
+
+The SDK ships two entry points:
+
+| Entry point | When to use |
+|-------------|-------------|
+| `@pipedream/sdk/server` | Node.js servers, serverless functions, and any environment with access to your OAuth credentials |
+| `@pipedream/sdk/browser` | Browser environments where you need to initiate account connections via Pipedream Connect |
+
+<Warning>
+  Never load the server client in browser code. It requires your `clientSecret`, which must not be exposed to end users.
+</Warning>
+
+## Installation
+
+```bash
+npm install @pipedream/sdk
+```
+
+## Server client
+
+The `BackendClient` is your primary interface for managing accounts, running actions, deploying triggers, and proxying API calls.
+
+### Create a client
+
+<CodeGroup>
+
+```typescript OAuth credentials
+import { createBackendClient } from "@pipedream/sdk/server";
+
+const client = createBackendClient({
+  environment: "production",   // "production" | "development"
+  projectId: "proj_abc123",
+  credentials: {
+    clientId: process.env.PD_CLIENT_ID,
+    clientSecret: process.env.PD_CLIENT_SECRET,
+  },
+});
+```
+
+```typescript Static access token
+import { createBackendClient } from "@pipedream/sdk/server";
+
+const client = createBackendClient({
+  environment: "production",
+  projectId: "proj_abc123",
+  credentials: {
+    accessToken: process.env.PD_API_KEY,
+  },
+});
+```
+
+</CodeGroup>
+
+### BackendClient options
+
+<ParamField body="environment" type="string" required>
+  The target environment. Must be `"production"` or `"development"`.
+</ParamField>
+
+<ParamField body="projectId" type="string" required>
+  Your Pipedream project ID.
+</ParamField>
+
+<ParamField body="credentials" type="object" required>
+  Either `{ clientId, clientSecret }` for OAuth, or `{ accessToken }` for a static API key.
+</ParamField>
+
+<ParamField body="apiHost" type="string">
+  Override the API hostname. Defaults to `api.pipedream.com`.
+</ParamField>
+
+<ParamField body="workflowDomain" type="string">
+  Override the workflow base domain. Defaults to `m.pipedream.net`.
+</ParamField>
+
+<ParamField body="scope" type="array">
+  OAuth scopes to request when obtaining access tokens.
+</ParamField>
+
+## Browser client
+
+The `BrowserClient` initiates the Pipedream Connect flow from the browser, allowing your users to connect third-party accounts without you ever handling their credentials.
+
+### Create a browser client
+
+```typescript
+import { createFrontendClient } from "@pipedream/sdk/browser";
+
+const client = createFrontendClient({
+  tokenCallback: async ({ externalUserId }) => {
+    // Call your server to get a short-lived Connect token
+    const res = await fetch("/api/connect-token", {
+      method: "POST",
+      body: JSON.stringify({ externalUserId }),
+    });
+    return res.json();
+  },
+  externalUserId: "user-123",
+});
+```
+
+### Connect an account
+
+```typescript
+await client.connectAccount({
+  app: "github",
+  onSuccess: (res) => {
+    console.log("Connected account ID:", res.id);
+  },
+  onError: (err) => {
+    console.error("Connection failed:", err.message);
+  },
+  onClose: (status) => {
+    if (!status.successful) {
+      console.log("User closed the dialog without connecting");
+    }
+  },
+});
+```
+
+## Key server-side operations
+
+<CardGroup cols={2}>
+  <Card title="Connect tokens" icon="key">
+    `client.createConnectToken(opts)` — Generate a short-lived token for browser-side Connect flows.
+  </Card>
+  <Card title="Accounts" icon="user">
+    `client.getAccounts(opts)` — List connected accounts. `client.getAccountById(id)` — Retrieve a single account with optional credentials.
+  </Card>
+  <Card title="Run actions" icon="play">
+    `client.runAction(opts)` — Execute an action component server-side on behalf of an end user.
+  </Card>
+  <Card title="Deploy triggers" icon="bolt">
+    `client.deployTrigger(opts)` — Deploy a trigger component that emits events to a workflow or webhook.
+  </Card>
+</CardGroup>
+
+## Shared types
+
+The SDK exports all TypeScript types from both entry points. Key shared types include:
+
+- `Account` — Connected account object
+- `App` — Pipedream app metadata
+- `V1Component` — Component definition with configurable props
+- `V1DeployedComponent` — A deployed trigger instance
+- `V1EmittedEvent` — An event emitted by a trigger
+- `ConnectTokenResponse` — Token + expiry + Connect Link URL
+- `ConfigurableProps` / `ConfiguredProps` — Prop type definitions
+
+See [$.axios](/api/platform/axios) and [utility functions](/api/platform/utils) for the runtime helpers available inside workflow steps.

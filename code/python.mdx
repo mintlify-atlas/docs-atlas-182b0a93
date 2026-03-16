@@ -1,0 +1,194 @@
+---
+title: "Python"
+description: "Run Python code in a workflow step. Import pip packages, access connected app credentials, and pass data between steps."
+---
+
+Python steps let you write custom Python logic in your Pipedream workflows. You can import any pip package, connect to integrated apps, and exchange data with other steps in the workflow.
+
+## Writing your first Python step
+
+Every Python step defines a `handler` function that receives a `pd` object — the Pipedream context:
+
+```python
+def handler(pd: "pipedream"):
+    return "Hello from Python!"
+```
+
+The `pd` object gives you access to step data, helper functions, and connected app credentials.
+
+## Importing pip packages
+
+Import packages at the top of your step. Pipedream automatically installs them — no `requirements.txt` needed:
+
+```python
+import pandas as pd_lib
+import requests
+from datetime import datetime
+
+def handler(pd: "pipedream"):
+    response = requests.get("https://api.example.com/data")
+    df = pd_lib.DataFrame(response.json())
+    return df.to_dict(orient="records")
+```
+
+<Note>
+  Pipedream installs the latest available version of a package by default. Pin a version by importing as `requests==2.28.0`.
+</Note>
+
+## Accessing data from previous steps
+
+Access data from previous steps using `pd.steps`:
+
+```python
+def handler(pd: "pipedream"):
+    # Access the return value from a step named "fetch_user"
+    user = pd.steps["fetch_user"]["$return_value"]
+
+    # Access a named export from a step named "parse_data"
+    items = pd.steps["parse_data"]["items"]
+
+    return {
+        "user_id": user["id"],
+        "item_count": len(items),
+    }
+```
+
+The trigger event is available as `pd.steps["trigger"]["event"]`:
+
+```python
+def handler(pd: "pipedream"):
+    event = pd.steps["trigger"]["event"]
+    body = event.get("body", {})
+    return body
+```
+
+## Exporting data
+
+Anything you return from `handler` becomes the step's return value, accessible to downstream steps as `$return_value`.
+
+Export named values with `pd.export()`:
+
+```python
+def handler(pd: "pipedream"):
+    results = fetch_results()
+    active = [r for r in results if r["active"]]
+
+    pd.export("activeCount", len(active))
+    pd.export("activeItems", active)
+
+    return {
+        "total": len(results),
+        "active": len(active),
+    }
+```
+
+## Connecting to apps
+
+Access connected app credentials through `pd.inputs`.
+
+### API key apps
+
+```python
+import requests
+
+def handler(pd: "pipedream"):
+    token = pd.inputs["openai"]["$auth"]["api_key"]
+
+    response = requests.post(
+        "https://api.openai.com/v1/chat/completions",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "model": "gpt-4o",
+            "messages": [{"role": "user", "content": "Hello!"}],
+        },
+    )
+    return response.json()
+```
+
+### OAuth apps
+
+For OAuth-based apps, the access token is available under the `oauth_access_token` key:
+
+```python
+import requests
+
+def handler(pd: "pipedream"):
+    token = pd.inputs["github"]["$auth"]["oauth_access_token"]
+
+    response = requests.get(
+        "https://api.github.com/user",
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/vnd.github.v3+json",
+        },
+    )
+    return response.json()
+```
+
+## Sending HTTP responses
+
+When your workflow uses an HTTP trigger with custom response enabled, call `pd.respond()` to return a response to the caller:
+
+```python
+def handler(pd: "pipedream"):
+    body = pd.steps["trigger"]["event"].get("body", {})
+
+    pd.respond({
+        "status": 200,
+        "headers": {"Content-Type": "application/json"},
+        "body": {
+            "message": "Received!",
+            "id": body.get("id"),
+        },
+    })
+```
+
+<Warning>
+  `pd.respond()` only works when your workflow uses an HTTP trigger with **Return a response from your workflow** enabled.
+</Warning>
+
+## Working with data
+
+### Processing JSON payloads
+
+```python
+import json
+
+def handler(pd: "pipedream"):
+    event = pd.steps["trigger"]["event"]
+    payload = event.get("body", {})
+
+    # Parse nested JSON string if needed
+    if isinstance(payload.get("data"), str):
+        payload["data"] = json.loads(payload["data"])
+
+    return payload
+```
+
+### Using pandas for data transformation
+
+```python
+import pandas as pd_lib
+import requests
+
+def handler(pd: "pipedream"):
+    rows = pd.steps["fetch_data"]["$return_value"]
+
+    df = pd_lib.DataFrame(rows)
+    df["created_at"] = pd_lib.to_datetime(df["created_at"])
+    df = df.sort_values("created_at", ascending=False)
+
+    return df.head(10).to_dict(orient="records")
+```
+
+## Logging
+
+Use `print()` to write to the step logs:
+
+```python
+def handler(pd: "pipedream"):
+    print("Starting processing...")
+    data = pd.steps["trigger"]["event"].get("body", {})
+    print(f"Received {len(data)} fields")
+    return data
+```

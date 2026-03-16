@@ -1,0 +1,180 @@
+---
+title: Components overview
+description: Build reusable, shareable integration components for Pipedream workflows — event sources that trigger workflows and actions that run as steps.
+---
+
+Pipedream components are Node.js modules that run on Pipedream's infrastructure. They come in two types: **sources** that emit events to trigger workflows, and **actions** that execute as steps inside a workflow. Components are reusable, versioned, and can be published to Pipedream's public registry for the community to use.
+
+<CardGroup cols={2}>
+  <Card title="Sources" icon="bolt" href="/components/sources/overview">
+    Trigger workflows on HTTP requests, timers, or any third-party event.
+  </Card>
+  <Card title="Actions" icon="play" href="/components/actions/overview">
+    Execute API calls, data transforms, and business logic as workflow steps.
+  </Card>
+  <Card title="Quickstart" icon="rocket" href="/components/quickstart">
+    Build and deploy your first source or action in minutes.
+  </Card>
+  <Card title="Props reference" icon="list" href="/components/actions/props">
+    Full reference for every prop type, including app, timer, HTTP, and database props.
+  </Card>
+</CardGroup>
+
+## What is a component?
+
+A Pipedream component is a JavaScript object exported from a `.mjs` or `.js` file. At minimum it has a `key`, `version`, `type`, and `run` method.
+
+```javascript
+export default {
+  key: "my-first-action",
+  name: "My First Action",
+  description: "A minimal Pipedream action.",
+  version: "0.0.1",
+  type: "action",
+  async run({ $ }) {
+    return "Hello from Pipedream!";
+  },
+};
+```
+
+Components can declare **props** — typed configuration fields that appear as inputs in the Pipedream UI. Props support static values, dynamic options fetched from an API, and special interface types like HTTP endpoints and timers.
+
+## Sources vs. actions
+
+| | Source | Action |
+|---|---|---|
+| **Purpose** | Trigger a workflow | Run as a step in a workflow |
+| **`type` field** | `"source"` | `"action"` |
+| **Emits events** | Yes, via `this.$emit()` | No |
+| **Returns data** | No | Yes, via `return` or `$.export()` |
+| **Can use HTTP interface** | Yes | No |
+| **Can use timer interface** | Yes | No |
+| **Lifecycle hooks** | `activate`, `deactivate`, `deploy` | None |
+
+## Component anatomy
+
+Every component shares a common structure:
+
+```javascript
+export default {
+  // --- Identity ---
+  key: "my-component",           // Unique across Pipedream (required)
+  name: "My Component",          // Display name shown in the UI
+  description: "What it does.",  // Short description
+  version: "0.0.1",              // Semver string (required)
+  type: "source" | "action",     // Component type (required)
+
+  // --- Inputs ---
+  props: {
+    // Typed configuration fields
+  },
+
+  // --- Lifecycle hooks (sources only) ---
+  hooks: {
+    async activate() {},    // Called when the source is enabled
+    async deactivate() {},  // Called when the source is disabled
+    async deploy() {},      // Called on first deploy (emit up to 50 historical events)
+  },
+
+  // --- Helper methods ---
+  methods: {
+    myHelper() {},
+  },
+
+  // --- Execution ---
+  async run(event) {
+    // Sources: receives the trigger event, calls this.$emit()
+    // Actions: receives { $, steps }, returns a value
+  },
+};
+```
+
+## TypeScript support
+
+Pipedream provides `defineComponent`, `defineSource`, and `defineAction` helpers from `@pipedream/types` for full TypeScript type checking:
+
+```typescript
+import { defineAction } from "@pipedream/types";
+
+export default defineAction({
+  key: "my-typed-action",
+  name: "My Typed Action",
+  version: "0.0.1",
+  type: "action",
+  async run({ $ }) {
+    return "typed!";
+  },
+});
+```
+
+The `defineComponent` helper (re-exported from `@pipedream/types`) is a common alternative that works for both sources and actions:
+
+```javascript
+import { defineComponent } from "@pipedream/types";
+
+export default defineComponent({
+  props: {
+    github: {
+      type: "app",
+      app: "github",
+    },
+  },
+  async run({ steps, $ }) {
+    // this.github.$auth.oauth_access_token is available here
+  },
+});
+```
+
+## The `@pipedream/platform` package
+
+The `@pipedream/platform` package provides utilities used in components:
+
+- **`axios`** — A pre-configured Axios instance that logs requests and responses to the Pipedream UI, handles OAuth token refreshes, and supports Pipedream-specific options like `returnFullResponse`.
+- **`ConfigurationError`** — Throw this to show a user-facing configuration error without surfacing a stack trace.
+- **`DEFAULT_POLLING_SOURCE_TIMER_INTERVAL`** — The default polling interval (15 minutes, in seconds).
+
+```javascript
+import { axios, ConfigurationError, DEFAULT_POLLING_SOURCE_TIMER_INTERVAL } from "@pipedream/platform";
+```
+
+## Deduplification
+
+Sources support deduplication to prevent emitting the same event twice. Set the `dedupe` field on your source to one of:
+
+- `"unique"` — Emit each event with a unique `id` only once.
+- `"greatest"` — Only emit events whose `id` is greater than the last emitted `id`.
+- `"last"` — Only emit events whose `id` is different from the last emitted `id`.
+
+When `dedupe` is set, the `id` field in `$emit` metadata becomes required.
+
+```javascript
+export default {
+  key: "my-deduped-source",
+  version: "0.0.1",
+  type: "source",
+  dedupe: "unique",
+  async run() {
+    this.$emit(event, {
+      id: event.id,         // Required when dedupe is set
+      summary: "New event",
+    });
+  },
+};
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/components/quickstart">
+    Build your first component end-to-end.
+  </Card>
+  <Card title="Component structure" icon="code" href="/components/component-structure">
+    Deep dive into props, methods, hooks, and the run method.
+  </Card>
+  <Card title="Publishing" icon="upload" href="/components/contributing/publishing">
+    Publish your component to Pipedream's public registry.
+  </Card>
+  <Card title="Contributing guidelines" icon="book" href="/components/contributing/guidelines">
+    Standards for naming, descriptions, and code style.
+  </Card>
+</CardGroup>

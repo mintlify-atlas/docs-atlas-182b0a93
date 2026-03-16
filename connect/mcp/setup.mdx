@@ -1,0 +1,154 @@
+---
+title: MCP server setup
+description: Connect an MCP client to Pipedream's hosted MCP server to give AI agents access to 2,800+ APIs on behalf of your users.
+---
+
+This guide configures an MCP client to use Pipedream's hosted MCP server. By the end, your AI agent will be able to call Pipedream actions using credentials stored for a specific user.
+
+## Prerequisites
+
+- A [Pipedream account](https://pipedream.com/auth/signup)
+- A [Pipedream project](https://pipedream.com/projects) — note its project ID
+- A [Pipedream OAuth client](https://pipedream.com/docs/rest-api/auth#creating-an-oauth-client) — note the client ID and secret
+- An MCP-compatible client (Claude Desktop, Cursor, Cline, or your own)
+
+## Step 1: Get your credentials
+
+You need four values to connect to Pipedream's MCP server:
+
+| Variable | Where to find it |
+|---|---|
+| `PIPEDREAM_CLIENT_ID` | OAuth client page in the Pipedream dashboard |
+| `PIPEDREAM_CLIENT_SECRET` | OAuth client page (shown once at creation) |
+| `PIPEDREAM_PROJECT_ID` | Project settings page |
+| `PIPEDREAM_PROJECT_ENVIRONMENT` | `development` or `production` |
+
+## Step 2: Have a user connect their account
+
+Before the MCP server can call any API on behalf of a user, that user must have a connected account in your Pipedream project. Use Pipedream Connect to let them connect:
+
+```typescript
+import { createBackendClient } from "@pipedream/sdk/server";
+
+const client = createBackendClient({
+  environment: "development",
+  projectId: process.env.PIPEDREAM_PROJECT_ID!,
+  credentials: {
+    clientId: process.env.PIPEDREAM_CLIENT_ID!,
+    clientSecret: process.env.PIPEDREAM_CLIENT_SECRET!,
+  },
+});
+
+// Issue a token so the user can connect their account
+const { token } = await client.createConnectToken({
+  external_user_id: "user-123",
+});
+```
+
+For a full account connection flow, see the [quickstart](/connect/quickstart).
+
+## Step 3: Configure your MCP client
+
+The server URL format is:
+
+```
+https://mcp.pipedream.com/{external_user_id}/{app}
+```
+
+### Claude Desktop
+
+Add the following to your Claude Desktop MCP configuration file (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
+
+```json
+{
+  "mcpServers": {
+    "pipedream-slack": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@pipedream/mcp",
+        "stdio",
+        "user-123",
+        "slack"
+      ],
+      "env": {
+        "PIPEDREAM_CLIENT_ID": "your_client_id",
+        "PIPEDREAM_CLIENT_SECRET": "your_client_secret",
+        "PIPEDREAM_PROJECT_ID": "proj_abc123",
+        "PIPEDREAM_PROJECT_ENVIRONMENT": "development"
+      }
+    }
+  }
+}
+```
+
+### Cursor
+
+In Cursor's settings, add an MCP server with the Streamable HTTP transport:
+
+```
+URL: https://mcp.pipedream.com/v1/user-123/slack
+```
+
+Set headers for authentication as required by your setup.
+
+### Any SSE-compatible client
+
+Point your client to:
+
+```
+https://mcp.pipedream.com/user-123/slack
+```
+
+For Streamable HTTP transport:
+
+```
+https://mcp.pipedream.com/v1/user-123/slack
+```
+
+## Step 4: Verify the connection
+
+Use the MCP Inspector to verify that the server is returning tools:
+
+```bash
+npx @modelcontextprotocol/inspector
+```
+
+Enter the URL `https://mcp.pipedream.com/v1/user-123/slack` and click **List Tools**. You should see all available Slack actions.
+
+## Multiple apps
+
+To give an agent access to multiple apps, configure multiple MCP servers — one per app:
+
+```json
+{
+  "mcpServers": {
+    "pipedream-slack": {
+      "command": "npx",
+      "args": ["-y", "@pipedream/mcp", "stdio", "user-123", "slack"],
+      "env": { ... }
+    },
+    "pipedream-github": {
+      "command": "npx",
+      "args": ["-y", "@pipedream/mcp", "stdio", "user-123", "github"],
+      "env": { ... }
+    }
+  }
+}
+```
+
+## Dynamic mode
+
+For an agent that should discover and use any app the user has connected, use the dynamic server (no `{app}` segment):
+
+```
+https://mcp.pipedream.com/v1/user-123
+```
+
+<Warning>
+  Dynamic mode is experimental and may return a large number of tools. This can increase prompt token usage significantly for agents that include the full tool list in their context.
+</Warning>
+
+## Finding app name slugs
+
+The `{app}` segment uses the app's **name slug** — a lowercase identifier like `slack`, `github`, or `google_sheets`. Find it in the **Authentication** section on any app's page at [pipedream.com/apps](https://pipedream.com/apps).

@@ -1,0 +1,117 @@
+---
+title: "Contributing"
+description: "How to contribute to Pipedream's open-source component registry, documentation, and community."
+---
+
+Pipedream's component registry is open source. You can contribute new integrations, fix bugs in existing components, improve documentation, and help other developers in the community.
+
+<Note>
+The canonical contribution guide is at [CONTRIBUTING.md](https://github.com/PipedreamHQ/pipedream/blob/master/CONTRIBUTING.md) in the GitHub repo. This page summarizes the main ways to contribute.
+</Note>
+
+## Ways to contribute
+
+<CardGroup cols={2}>
+  <Card title="Build components" icon="puzzle-piece" href="https://github.com/PipedreamHQ/pipedream/tree/master/components">
+    Create new event sources (triggers) or actions for any API. Published components are available to all Pipedream users.
+  </Card>
+  <Card title="Report bugs" icon="bug" href="https://pipedream.com/community/c/bugs/9">
+    Found a problem? Report it in the community forum or open a GitHub issue.
+  </Card>
+  <Card title="Improve docs" icon="book" href="https://github.com/PipedreamHQ/pipedream/tree/master/docs">
+    Found a gap or error in the docs? Submit a pull request to the `docs` directory.
+  </Card>
+  <Card title="Answer questions" icon="comments" href="https://pipedream.com/community">
+    Help other developers in the community forum. Shared knowledge benefits everyone.
+  </Card>
+</CardGroup>
+
+## Developing components
+
+### Setting up your environment
+
+You can develop components without any local setup using the Pipedream Gitpod workspace:
+
+[![Open in Gitpod](https://gitpod.io/button/open-in-gitpod.svg)](https://gitpod.io/#https://github.com/PipedreamHQ/pipedream)
+
+For local development:
+
+<Steps>
+  <Step title="Fork the repository">
+    Fork [github.com/PipedreamHQ/pipedream](https://github.com/PipedreamHQ/pipedream) to your GitHub account.
+  </Step>
+  <Step title="Clone and install dependencies">
+    Clone your fork and install dependencies using `pnpm`:
+
+    ```bash
+    git clone https://github.com/<your-username>/pipedream
+    cd pipedream
+    pnpm install
+    ```
+
+    Pipedream uses `pnpm` as its package manager. Use `pnpm` rather than `npm` or `yarn` when working in this repo.
+  </Step>
+  <Step title="Create a branch">
+    Create a new branch for your changes:
+
+    ```bash
+    git checkout -b my-component-name
+    ```
+  </Step>
+  <Step title="Make your changes">
+    Components live in the [`components` directory](https://github.com/PipedreamHQ/pipedream/tree/master/components), organized by app name. Follow the [component guidelines](https://pipedream.com/docs/components/guidelines/) when creating or modifying components.
+  </Step>
+  <Step title="Run tests">
+    Run the test suite before opening a pull request:
+
+    ```bash
+    pnpm test
+    ```
+  </Step>
+  <Step title="Open a pull request">
+    Push your branch and open a pull request against `master`. Include a description of what the PR changes and why. A Pipedream team member will be notified automatically.
+  </Step>
+</Steps>
+
+### Using Gitpod
+
+If you prefer to develop in the browser without installing dependencies locally:
+
+1. Add your Pipedream API key to [Gitpod Variables](https://gitpod.io/variables) as `PD_API_KEY`
+2. Open your fork in Gitpod: `https://gitpod.io/#https://github.com/<your-username>/pipedream`
+3. The workspace automatically configures the Pipedream CLI with your API key
+4. Run `pd init app` to scaffold a new app component, or edit existing components in `components/`
+
+### Component guidelines
+
+Before submitting a component PR, review the official [component guidelines](https://pipedream.com/docs/components/guidelines/). The guidelines cover:
+
+- Required and optional metadata fields
+- Naming conventions for keys, labels, and descriptions
+- How to structure props and handle authentication
+- The publishing process for making a component available to all users
+
+## Spell checking
+
+A spell checker runs automatically on Markdown files in pull requests. If the check fails, look at the output for flagged words. Technical terms not in the standard dictionary (such as `Pipedream` or `JavaScript`) can be added to `.wordlist.txt` in the repository root.
+
+## Requesting apps and features
+
+If you want to request a new app integration or platform feature without building it yourself:
+
+- **New app integration:** [Open an app request](https://github.com/PipedreamHQ/pipedream/issues/new?assignees=&labels=app%2C+enhancement&template=app---service-integration.md&title=%5BAPP%5D) on GitHub
+- **Feature request:** [Submit in the community forum](https://pipedream.com/community/c/feature-requests/7) or [open a GitHub issue](https://github.com/PipedreamHQ/pipedream/issues/new?template=feature_request.md)
+- **Browse existing requests:** Vote or comment on [open issues](https://github.com/PipedreamHQ/pipedream/issues) to signal demand
+
+## Other ways to help
+
+- **Share your workflows** in the [community forum](https://pipedream.com/community/c/show-tell/8) or on Twitter — you may help someone else solve the same problem
+- **Write about Pipedream** — blog posts and videos help the community grow. Tag [@pipedream](https://twitter.com/pipedream) or share with us so we can feature your content
+- **Star the repo** on [GitHub](https://github.com/PipedreamHQ/pipedream) to help others find the project
+
+## Getting help while contributing
+
+If you have questions while working on a contribution, reach out in:
+
+- The [developer section](https://pipedream.com/community/c/dev/11) of the community forum
+- The [Pipedream Slack](https://pipedream.com/support)

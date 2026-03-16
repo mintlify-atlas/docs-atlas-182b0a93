@@ -1,0 +1,93 @@
+---
+title: "REST API overview"
+description: "Manage workflows, sources, and components programmatically with the Pipedream REST API."
+---
+
+The Pipedream REST API lets you manage workflows, event sources, and components from any HTTP client, CI/CD pipeline, or your own application. All endpoints are served from:
+
+```
+https://api.pipedream.com/v1
+```
+
+<CardGroup cols={2}>
+  <Card title="Authentication" icon="key" href="/api/authentication">
+    API keys and OAuth 2.0 for machine-to-machine auth
+  </Card>
+  <Card title="Workflows" icon="workflow" href="/api/workflows">
+    Create, update, and delete workflows
+  </Card>
+  <Card title="Sources" icon="bolt" href="/api/sources">
+    Manage event sources and retrieve emitted events
+  </Card>
+  <Card title="Components" icon="puzzle-piece" href="/api/components">
+    Publish and manage reusable components
+  </Card>
+</CardGroup>
+
+## Base URL
+
+Every request targets `https://api.pipedream.com/v1`. Version (`v1`) is part of the path and is required.
+
+## Request format
+
+Send request bodies as JSON with `Content-Type: application/json`.
+
+```bash
+curl -X POST https://api.pipedream.com/v1/workflows \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"org_id": "o_abc123", "steps": []}'
+```
+
+## Response format
+
+All successful responses return JSON. Resources are usually nested under a `data` key. Paginated list responses include a `page_info` object.
+
+```json
+{
+  "data": [
+    {
+      "id": "p_abc123",
+      "name": "My Workflow"
+    }
+  ],
+  "page_info": {
+    "total_count": 42,
+    "count": 10,
+    "start_cursor": "cur_start",
+    "end_cursor": "cur_end"
+  }
+}
+```
+
+## Pagination
+
+List endpoints support cursor-based pagination via `after` and `before` query parameters.
+
+| Parameter | Description |
+|-----------|-------------|
+| `after`   | Return records after this cursor |
+| `before`  | Return records before this cursor |
+| `limit`   | Maximum number of records to return |
+
+## HTTP status codes
+
+| Status | Meaning |
+|--------|---------|
+| `200`  | Request succeeded |
+| `201`  | Resource created |
+| `204`  | Request succeeded with no response body |
+| `400`  | Bad request — check the request body or parameters |
+| `401`  | Unauthorized — missing or invalid credentials |
+| `403`  | Forbidden — valid credentials, but insufficient permissions |
+| `404`  | Resource not found |
+| `429`  | Rate limit exceeded |
+| `500`  | Internal server error |
+
+## Rate limiting
+
+The API enforces rate limits per account. When you exceed the limit, the server returns `429 Too Many Requests`. Implement exponential backoff and retry logic in your client.
+
+## SDK
+
+For server-side TypeScript and JavaScript, use the Pipedream Connect SDK instead of calling the REST API directly. See the [Platform SDK overview](/api/platform/overview).

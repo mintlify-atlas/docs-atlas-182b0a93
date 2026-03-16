@@ -1,0 +1,149 @@
+---
+title: External user management
+description: Understand how Pipedream Connect represents your users and manage their connected accounts and data.
+---
+
+An **external user** is your user, identified by a string ID you choose. Pipedream uses this ID to scope all connected accounts and API calls. You never create users in Pipedream — they appear automatically when you create a Connect token for an ID, and disappear when you delete their data.
+
+## External user IDs
+
+An external user ID can be any non-empty string that uniquely identifies a user in your system. Typical choices:
+
+- A database primary key (`42`, `usr_7a9f3b`)
+- A UUID (`550e8400-e29b-41d4-a716-446655440000`)
+- An email address (only if it never changes)
+- A username or slug
+
+```typescript
+// All of these are valid external_user_ids
+await client.createConnectToken({ external_user_id: "42" });
+await client.createConnectToken({ external_user_id: "usr_7a9f3b" });
+await client.createConnectToken({ external_user_id: "alice" });
+```
+
+<Warning>
+  External user IDs appear in Connect token payloads and MCP server URLs. Avoid using IDs that contain sensitive information (e.g. social security numbers, full email addresses in security-sensitive contexts).
+</Warning>
+
+## Account scoping
+
+Every connected account belongs to exactly one external user and one project environment. When you call `getAccounts` or `runAction`, you specify the external user ID to access only that user's accounts.
+
+```typescript
+// Only returns accounts for user-123 in this project+environment
+const { data: accounts } = await client.getAccounts({
+  external_user_id: "user-123",
+});
+```
+
+## Listing connected accounts
+
+Retrieve all accounts for a user:
+
+```typescript
+const { data: accounts } = await client.getAccounts({
+  external_user_id: "user-123",
+});
+
+for (const account of accounts) {
+  console.log(account.id, account.app.name, account.healthy);
+}
+```
+
+Filter by app:
+
+```typescript
+const { data: slackAccounts } = await client.getAccounts({
+  external_user_id: "user-123",
+  app: "slack",
+});
+```
+
+## Account health
+
+Each account has a `healthy` boolean. Unhealthy accounts have expired or invalid credentials. Pipedream automatically retries token refresh for OAuth accounts. If an account remains unhealthy, the user should reconnect it.
+
+```typescript
+const unhealthy = accounts.filter((a) => !a.healthy);
+if (unhealthy.length > 0) {
+  console.log("These accounts need reconnecting:", unhealthy.map((a) => a.app.name));
+}
+```
+
+## Deleting a connected account
+
+Delete a specific account by ID. This revokes Pipedream's stored credentials and removes the account.
+
+```typescript
+await client.deleteAccount("apn_z8hD1b4");
+```
+
+## Deleting all accounts for a user
+
+When a user deletes their account in your system, remove all their Pipedream data:
+
+```typescript
+await client.deleteExternalUser("user-123");
+```
+
+This deletes:
+- All connected accounts for the user
+- All deployed triggers for the user
+
+<Warning>
+  This operation is irreversible. The user will need to reconnect all their accounts if they return.
+</Warning>
+
+## Deleting all accounts for an app
+
+Remove all accounts connected to a specific app across all users in the project:
+
+```typescript
+await client.deleteAccountsByApp("app_id");
+```
+
+Use this when you remove an integration from your product entirely.
+
+## Account object reference
+
+<ResponseField name="id" type="string">
+  Unique account identifier (e.g. `apn_z8hD1b4`). Use this as `authProvisionId` in `configuredProps` when running actions.
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Display name for the account, typically the connected username or email.
+</ResponseField>
+
+<ResponseField name="external_id" type="string">
+  The external user ID this account belongs to.
+</ResponseField>
+
+<ResponseField name="healthy" type="boolean">
+  Whether the account credentials are currently valid.
+</ResponseField>
+
+<ResponseField name="dead" type="boolean">
+  Whether the account has been permanently deactivated.
+</ResponseField>
+
+<ResponseField name="app" type="App">
+  Metadata about the connected app, including `name`, `name_slug`, `auth_type`, and `img_src`.
+</ResponseField>
+
+<ResponseField name="created_at" type="string">
+  ISO 8601 timestamp when the account was created.
+</ResponseField>
+
+<ResponseField name="updated_at" type="string">
+  ISO 8601 timestamp when the account was last updated.
+</ResponseField>
+
+<ResponseField name="credentials" type="Record<string, string>">
+  Raw credentials (API keys, OAuth tokens). Only present when `include_credentials: true` was passed to `getAccounts` or `getAccountById`. Handle with care — do not log or expose these values.
+</ResponseField>
+
+## Environment isolation
+
+Accounts connected in `development` are completely separate from accounts in `production`. When you switch your backend client to `environment: "production"`, your `development` accounts will not appear.
+
+This lets you test integrations with development accounts without affecting your production users' connected accounts.

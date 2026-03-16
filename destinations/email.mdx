@@ -1,0 +1,139 @@
+---
+title: "Email"
+description: "Send email to your Pipedream account address from a workflow using $send.email()."
+---
+
+The Email destination sends an email to the address associated with your Pipedream account. Use it to receive notifications, summaries, or alerts directly from your workflows.
+
+## Usage
+
+```javascript
+export default defineComponent({
+  async run({ steps, $ }) {
+    $send.email({
+      subject: "New form submission",
+      text: "You have a new form submission.",
+      html: "<h2>New Submission</h2><p>You have a new form submission.</p>",
+    })
+  }
+})
+```
+
+<Note>
+  Email is sent to the email address associated with your Pipedream account. You cannot send to arbitrary addresses using this destination.
+</Note>
+
+## Parameters
+
+<ParamField body="subject" type="string">
+  The email subject line.
+</ParamField>
+
+<ParamField body="text" type="string">
+  The plain-text body of the email. Used as a fallback for email clients that do not render HTML. At least one of `text` or `html` should be provided.
+</ParamField>
+
+<ParamField body="html" type="string">
+  The HTML body of the email. Rendered by email clients that support HTML. At least one of `text` or `html` should be provided.
+</ParamField>
+
+## Examples
+
+### Send a plain-text notification
+
+```javascript
+export default defineComponent({
+  async run({ steps, $ }) {
+    const event = steps.trigger.event
+
+    $send.email({
+      subject: `New event: ${event.body?.type ?? "unknown"}`,
+      text: `Received a new event at ${new Date().toISOString()}\n\nPayload:\n${JSON.stringify(event.body, null, 2)}`,
+    })
+  }
+})
+```
+
+### Send an HTML digest
+
+```javascript
+export default defineComponent({
+  async run({ steps, $ }) {
+    const items = steps.fetch_items.$return_value
+
+    const rows = items
+      .map(item => `<tr><td>${item.id}</td><td>${item.name}</td><td>${item.status}</td></tr>`)
+      .join("\n")
+
+    $send.email({
+      subject: `Daily digest: ${items.length} items`,
+      html: `
+        <h2>Daily Digest</h2>
+        <p>${items.length} items as of ${new Date().toLocaleDateString()}</p>
+        <table border="1" cellpadding="8">
+          <thead>
+            <tr><th>ID</th><th>Name</th><th>Status</th></tr>
+          </thead>
+          <tbody>
+            ${rows}
+          </tbody>
+        </table>
+      `,
+      text: items.map(i => `${i.id}: ${i.name} (${i.status})`).join("\n"),
+    })
+  }
+})
+```
+
+### Alert on error condition
+
+```javascript
+export default defineComponent({
+  async run({ steps, $ }) {
+    const results = steps.process_data.$return_value
+    const errors = results.filter(r => r.status === "error")
+
+    if (errors.length > 0) {
+      $send.email({
+        subject: `Alert: ${errors.length} processing errors`,
+        html: `
+          <h2>Processing Errors Detected</h2>
+          <p><strong>${errors.length}</strong> records failed to process.</p>
+          <ul>
+            ${errors.map(e => `<li>${e.id}: ${e.message}</li>`).join("\n")}
+          </ul>
+        `,
+        text: `${errors.length} errors:\n` + errors.map(e => `- ${e.id}: ${e.message}`).join("\n"),
+      })
+    }
+
+    return { processed: results.length, errors: errors.length }
+  }
+})
+```
+
+### Include dynamic subject with step data
+
+```javascript
+export default defineComponent({
+  async run({ steps, $ }) {
+    const order = steps.trigger.event.body
+
+    $send.email({
+      subject: `Order #${order.id} received — $${order.total}`,
+      html: `
+        <h2>New Order Received</h2>
+        <p><strong>Order ID:</strong> ${order.id}</p>
+        <p><strong>Customer:</strong> ${order.customer.name}</p>
+        <p><strong>Total:</strong> $${order.total}</p>
+        <p><strong>Items:</strong> ${order.items.length}</p>
+      `,
+      text: `New order #${order.id} from ${order.customer.name} for $${order.total}.`,
+    })
+  }
+})
+```
+
+## Delivery behavior
+
+`$send.email()` is **asynchronous**. Your step completes immediately and Pipedream queues the email for delivery. Email typically arrives within seconds, though delivery may be delayed under high load.

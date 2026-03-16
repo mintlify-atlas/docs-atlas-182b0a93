@@ -1,0 +1,238 @@
+---
+title: "Go"
+description: "Run Go code in a workflow step. Import Go modules, export data, and interact with the Pipedream platform using the pipedream-go package."
+---
+
+Go steps let you write custom Go logic in your Pipedream workflows. You can import Go modules, access step data from previous steps, and export values for use downstream.
+
+## Writing your first Go step
+
+Every Go step is a `main` package with a `main` function. Import the Pipedream Go SDK to interact with the platform:
+
+```go
+package main
+
+import (
+	"fmt"
+	pd "github.com/PipedreamHQ/pipedream-go"
+)
+
+func main() {
+	fmt.Println("Hello from Go!")
+	pd.Export("message", "Hello, World!")
+}
+```
+
+## Importing packages
+
+Import any Go module at the top of your step. Pipedream automatically resolves and downloads dependencies:
+
+```go
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+	pd "github.com/PipedreamHQ/pipedream-go"
+)
+
+func main() {
+	resp, err := http.Get("https://api.example.com/data")
+	if err != nil {
+		fmt.Println("Error:", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	var data map[string]interface{}
+	json.NewDecoder(resp.Body).Decode(&data)
+
+	pd.Export("result", data)
+}
+```
+
+## Exporting data
+
+Use `pd.Export()` to make values available to downstream steps. Exported values appear in the step results and are accessible as `steps.stepName.key`:
+
+```go
+package main
+
+import (
+	"fmt"
+	pd "github.com/PipedreamHQ/pipedream-go"
+)
+
+func main() {
+	users := []map[string]interface{}{
+		{"id": 1, "name": "Alice"},
+		{"id": 2, "name": "Bob"},
+	}
+
+	fmt.Printf("Found %d users\n", len(users))
+
+	pd.Export("users", users)
+	pd.Export("count", len(users))
+}
+```
+
+<Note>
+  Unlike Node.js and Python steps, Go steps use `pd.Export()` as the primary mechanism for passing data downstream. There is no implicit return value.
+</Note>
+
+## Accessing step data
+
+Access data from previous steps using the `pd.Steps` map:
+
+```go
+package main
+
+import (
+	"fmt"
+	pd "github.com/PipedreamHQ/pipedream-go"
+)
+
+func main() {
+	// Access the return value from a previous step named "fetch_user"
+	previousStepData := pd.Steps["fetch_user"]
+	returnValue := previousStepData["$return_value"]
+
+	fmt.Println("Previous step return value:", returnValue)
+	pd.Export("processed", returnValue)
+}
+```
+
+## Sending HTTP responses
+
+When your workflow uses an HTTP trigger with custom response enabled, use `pd.Respond()` to send a response back to the caller:
+
+```go
+package main
+
+import (
+	"net/http"
+	pd "github.com/PipedreamHQ/pipedream-go"
+)
+
+func main() {
+	pd.Respond(&pd.HTTPResponse{
+		Status: http.StatusOK,
+		Headers: map[string]string{
+			"Content-Type": "application/json",
+		},
+		Body: map[string]interface{}{
+			"message": "Received!",
+		},
+	})
+}
+```
+
+<Warning>
+  `pd.Respond()` only works when your workflow uses an HTTP trigger with **Return a response from your workflow** enabled.
+</Warning>
+
+## Making HTTP requests
+
+```go
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	pd "github.com/PipedreamHQ/pipedream-go"
+)
+
+func main() {
+	client := &http.Client{}
+
+	req, err := http.NewRequest("GET", "https://api.example.com/items", nil)
+	if err != nil {
+		fmt.Println("Error creating request:", err)
+		return
+	}
+	req.Header.Set("Authorization", "Bearer my-token")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		fmt.Println("Error making request:", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+
+	var items []map[string]interface{}
+	json.Unmarshal(body, &items)
+
+	fmt.Printf("Fetched %d items\n", len(items))
+	pd.Export("items", items)
+}
+```
+
+## Error handling
+
+```go
+package main
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
+	pd "github.com/PipedreamHQ/pipedream-go"
+)
+
+func fetchData(url string) (map[string]interface{}, error) {
+	resp, err := http.Get(url)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, errors.New(fmt.Sprintf("unexpected status: %d", resp.StatusCode))
+	}
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+func main() {
+	data, err := fetchData("https://api.example.com/data")
+	if err != nil {
+		fmt.Println("Error:", err)
+		return
+	}
+
+	pd.Export("data", data)
+}
+```
+
+## Logging
+
+Use `fmt.Println()` or `fmt.Printf()` to write to the step logs:
+
+```go
+package main
+
+import (
+	"fmt"
+	pd "github.com/PipedreamHQ/pipedream-go"
+)
+
+func main() {
+	fmt.Println("Starting processing...")
+
+	result := "processed value"
+	fmt.Printf("Result: %s\n", result)
+
+	pd.Export("result", result)
+}
+```

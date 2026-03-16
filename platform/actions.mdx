@@ -1,0 +1,263 @@
+---
+title: "Actions"
+description: "Actions are pre-built steps you add to a workflow to perform common operations across 1,000+ API integrations."
+---
+
+Actions are reusable workflow steps that encapsulate a specific task — sending a Slack message, adding a row to Google Sheets, creating a GitHub issue, or making an HTTP request. You configure an action's inputs via props, and Pipedream handles authentication, request construction, and error handling.
+
+## Using actions in a workflow
+
+<Steps>
+  <Step title="Open the step picker">
+    In the workflow editor, click **+** between steps to open the step picker.
+  </Step>
+  <Step title="Search for an action">
+    Type an app name or task description. For example, type `slack` to find Slack actions, or `send email` to find email actions.
+  </Step>
+  <Step title="Connect your account">
+    If the action requires authentication, Pipedream prompts you to connect an account. For OAuth apps, Pipedream initiates the OAuth flow and manages token refresh automatically.
+  </Step>
+  <Step title="Configure props">
+    Fill in the action's input fields. You can hardcode values, reference previous step exports (e.g., `{{steps.trigger.event.body.userId}}`), or write expressions.
+  </Step>
+  <Step title="Test and deploy">
+    Click **Test** to run the action with a real event. Inspect the exports in the **Exports** panel, then deploy when ready.
+  </Step>
+</Steps>
+
+## Anatomy of an action component
+
+Actions are JavaScript (ESM) components with `type: "action"`:
+
+```javascript
+export default {
+  name: "Action Demo",
+  description: "This is a demo action",
+  key: "action_demo",
+  version: "0.0.1",
+  type: "action",
+  props: {
+    name: {
+      type: "string",
+      label: "Name",
+    },
+  },
+  async run() {
+    return `hello ${this.name}!`;
+  },
+};
+```
+
+| Field | Description |
+|-------|-------------|
+| `key` | Unique identifier for the action (e.g., `slack-send-message`) |
+| `name` | Human-readable name shown in the UI |
+| `description` | Short description shown in the step picker |
+| `version` | Semver version string |
+| `type` | Must be `"action"` |
+| `props` | Input definitions — Pipedream renders a form from these |
+| `run()` | The function that executes when the step runs |
+
+## Connected app actions
+
+Most actions connect to an external API. The `app` prop type tells Pipedream to prompt the user for account credentials and inject them at runtime:
+
+```javascript
+import { WebClient } from "@slack/web-api";
+
+export default defineComponent({
+  props: {
+    slack: {
+      type: "app",
+      app: "slack",
+    },
+    channel: {
+      type: "string",
+      label: "Channel",
+      description: "The Slack channel to post to (e.g., #general)",
+    },
+    text: {
+      type: "string",
+      label: "Message",
+    },
+  },
+  async run({ steps, $ }) {
+    const web = new WebClient(this.slack.$auth.oauth_access_token);
+    return await web.chat.postMessage({
+      channel: this.channel,
+      text: this.text,
+    });
+  },
+});
+```
+
+Pipedream manages the OAuth token lifecycle — you never need to write refresh logic.
+
+## Accessing step data in actions
+
+The `run()` function receives `{ steps, $ }`. Use `steps` to access exports from previous steps:
+
+```javascript
+export default defineComponent({
+  props: {
+    // ...
+  },
+  async run({ steps, $ }) {
+    // Access trigger event
+    const { body } = steps.trigger.event;
+
+    // Access a named export from a previous step
+    const userId = steps.fetchUser.$return_value.id;
+
+    // Export a value for downstream steps
+    $.export("processedAt", new Date().toISOString());
+
+    return { userId, body };
+  },
+});
+```
+
+## Making HTTP requests in actions
+
+Use the Pipedream platform `axios` helper for HTTP requests. It provides cleaner error messages and debug exports compared to raw `axios`:
+
+```javascript
+import { axios } from "@pipedream/platform";
+
+export default defineComponent({
+  props: {
+    myApi: {
+      type: "app",
+      app: "my_api",
+    },
+  },
+  async run({ steps, $ }) {
+    return await axios($, {
+      method: "GET",
+      url: "https://api.example.com/v1/users",
+      headers: {
+        Authorization: `Bearer ${this.myApi.$auth.access_token}`,
+      },
+    });
+  },
+});
+```
+
+<Tip>
+Pass `$` as the first argument to `axios($, config)` to enable automatic debug exports. When a request fails, the response body, status, and headers are exported to the step for inspection.
+</Tip>
+
+## The HTTP / Webhook action
+
+The built-in **Send any HTTP Request** action lets you make arbitrary HTTP requests without writing code. It provides a Postman-like interface for configuring the URL, method, headers, query parameters, and body.
+
+```javascript
+// Equivalent code for what the action does:
+export default {
+  key: "http-custom-request",
+  name: "Send any HTTP Request",
+  type: "action",
+  version: "1.1.3",
+  props: {
+    http: { type: "app", app: "http" },
+    httpRequest: {
+      type: "http_request",
+      label: "HTTP Request Configuration",
+    },
+    includeHeaders: {
+      type: "boolean",
+      label: "Include Response Headers",
+      optional: true,
+    },
+  },
+  async run({ $ }) {
+    const response = await this.httpRequest.execute();
+    if (this.includeHeaders) {
+      $.export("headers", response.headers);
+    }
+    return response;
+  },
+};
+```
+
+The action exports the response body as its return value, which downstream steps can reference.
+
+## Creating custom actions
+
+You can build your own reusable actions:
+
+1. Write the component code in the workflow editor using a **Run custom code** step.
+2. Click **Publish as action** to save it to your account.
+3. The action becomes available in the step picker for all your workflows.
+4. Optionally, [contribute it to the Pipedream registry](/components/contributing/guidelines) to share it with the community.
+
+## Prop types reference
+
+<AccordionGroup>
+  <Accordion title="string">
+    ```javascript
+    propName: {
+      type: "string",
+      label: "Display label",
+      description: "Shown as help text below the input.",
+      optional: true,       // makes the prop optional
+      default: "hello",     // pre-fills the input
+    }
+    ```
+  </Accordion>
+  <Accordion title="integer">
+    ```javascript
+    propName: {
+      type: "integer",
+      label: "Count",
+      min: 1,
+      max: 100,
+      optional: true,
+    }
+    ```
+  </Accordion>
+  <Accordion title="boolean">
+    ```javascript
+    propName: {
+      type: "boolean",
+      label: "Enable feature",
+      default: false,
+    }
+    ```
+  </Accordion>
+  <Accordion title="string[] (multi-select)">
+    ```javascript
+    propName: {
+      type: "string[]",
+      label: "Tags",
+      options: ["alpha", "beta", "production"],
+    }
+    ```
+  </Accordion>
+  <Accordion title="app (connected account)">
+    ```javascript
+    propName: {
+      type: "app",
+      app: "slack",  // app slug from pipedream.com/apps
+    }
+    ```
+    Credentials are available at `this.propName.$auth`.
+  </Accordion>
+</AccordionGroup>
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Custom code" icon="code" href="/platform/custom-code">
+    Write arbitrary Node.js, Python, Go, or Bash in a step.
+  </Card>
+  <Card title="Event sources" icon="bolt" href="/platform/event-sources">
+    Trigger workflows from app events.
+  </Card>
+  <Card title="Building actions" icon="puzzle-piece" href="/components/actions/overview">
+    Full reference for building and publishing action components.
+  </Card>
+  <Card title="Destinations" icon="database" href="/platform/destinations">
+    Asynchronously deliver events to S3, Snowflake, and more.
+  </Card>
+</CardGroup>

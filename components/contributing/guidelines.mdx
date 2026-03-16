@@ -1,0 +1,176 @@
+---
+title: Contributing guidelines
+description: Standards for building, naming, and submitting Pipedream components to the public registry.
+---
+
+Pipedream's registry of sources and actions is open source. This page describes the guidelines contributors must follow to get components merged into the registry. Following these standards ensures components are consistent, discoverable, and maintainable.
+
+## Code standards
+
+### File format and naming
+
+- Component files use ESM syntax (`export default`, `import`) with the `.mjs` extension.
+- File names use kebab-case and match the component `key` without the app prefix: `create-issue.mjs` for `github-create-issue`.
+- One component per file.
+- Directory structure mirrors the component type:
+  ```
+  components/
+  └── github/
+      ├── github.app.mjs
+      ├── actions/
+      │   └── create-issue/
+      │       └── create-issue.mjs
+      └── sources/
+          └── new-commit/
+              └── new-commit.mjs
+  ```
+
+### Component keys
+
+- Keys are lowercase kebab-case.
+- Registry components must be prefixed with the app slug: `github-create-issue`, not `create-github-issue`.
+- Keys must be unique across the entire Pipedream registry.
+- Never reuse a key; bump the version instead.
+
+### Versioning
+
+- Versions follow [semver](https://semver.org/): `MAJOR.MINOR.PATCH`.
+- Start new components at `0.0.1`.
+- Bump the patch version for bug fixes and minor improvements.
+- Bump the minor version for new optional props or non-breaking changes.
+- Bump the major version for breaking changes to existing props.
+- **Never publish a component change without bumping the version.** Existing workflows pin to a specific version; bumping the version lets users choose when to upgrade.
+
+### Style
+
+- Follow the existing ESLint configuration in the repository (`eslint.config.mjs`).
+- Use `async/await` instead of promise chains.
+- Destructure props at the top of `run` when passing them to a method: `const { myapp, repoFullname, ...data } = this;`.
+- Avoid `console.log` in production components (use `$.export` or return values instead).
+
+## Naming conventions
+
+### Component names
+
+- Source names describe the event: `"New Commit"`, `"New Issue Comment"`, `"Closed Pull Request"`.
+- Action names describe the operation: `"Create Issue"`, `"Send Message"`, `"Update Record"`.
+- Names use title case.
+- Avoid redundant app name in the component name: `"Create Issue"`, not `"GitHub Create Issue"`. The app name is shown separately in the UI.
+
+### Prop labels
+
+- Labels use title case: `"Repository"`, `"Response Status Code"`.
+- Labels should be concise (1–4 words).
+- Avoid repeating the prop type in the label: `"Title"`, not `"Title String"`.
+
+### Prop descriptions
+
+- Descriptions use sentence case and end with a period.
+- Include format examples where the format is not obvious: “The full repository name, e.g. `owner/repo`.”
+- Link to upstream API documentation for fields that have API-side constraints.
+- Every non-trivial prop must have a description. The ESLint rule `pipedream/props-description` enforces this.
+
+### Summaries (`$summary`)
+
+- Every action must call `$.export("$summary", ...)` with a concise past-tense description of what was done.
+- Include the key identifier of the created/modified resource: `"Successfully created issue (ID: 123)"`.
+- Every `$emit` call in a source should include a `summary` string.
+
+## App component standards
+
+- App components live in `components/<app-slug>/<app-slug>.app.mjs`.
+- Define all reusable prop configurations in `propDefinitions`.
+- Define all API call methods in `methods` (not inline in action/source `run` methods).
+- App methods should not reference `this.db` or `this.http` — those are instance-level props.
+- App methods that call an API should use `axios` from `@pipedream/platform`.
+
+```javascript
+// Good: method defined on the app component
+export default {
+  type: "app",
+  app: "github",
+  methods: {
+    async createIssue({ repoFullname, data }) {
+      return axios(this, {
+        method: "POST",
+        url: `https://api.github.com/repos/${repoFullname}/issues`,
+        headers: {
+          Authorization: `token ${this.$auth.oauth_access_token}`,
+        },
+        data,
+      });
+    },
+  },
+};
+```
+
+## Sources
+
+- Sources must emit events — a source that never calls `this.$emit()` is not valid.
+- Polling sources must use `$.service.db` to track state and avoid re-emitting seen events.
+- Use deduplication (`dedupe: "unique"`) for polling sources.
+- Include a `deploy` hook that emits up to 5 historical events so workflows have data to test with immediately.
+- Timer sources should default to `DEFAULT_POLLING_SOURCE_TIMER_INTERVAL` from `@pipedream/platform`.
+- Webhook sources must register the webhook in `activate` and remove it in `deactivate`.
+
+## Actions
+
+- Actions must return a value or call `$.export()` with meaningful data.
+- Actions must call `$.export("$summary", ...)` with a human-readable result string.
+- Actions should not hard-code credentials. All secrets must come from a connected app prop.
+- Throw `ConfigurationError` (from `@pipedream/platform`) for user-facing configuration problems, not generic `Error`.
+
+## Pull request process
+
+<Steps>
+  <Step title="Fork and branch">
+    Fork the [Pipedream GitHub repository](https://github.com/PipedreamHQ/pipedream) and create a new branch for your changes:
+
+    ```bash
+    git checkout -b feat/github-create-branch
+    ```
+  </Step>
+
+  <Step title="Develop and test">
+    Write your component and test it by deploying to your Pipedream account:
+
+    ```bash
+    pd publish components/github/actions/create-branch/create-branch.mjs
+    ```
+
+    Test the component in a real workflow before opening a PR.
+  </Step>
+
+  <Step title="Run the linter">
+    The repository uses ESLint with Pipedream-specific rules. Run it before committing:
+
+    ```bash
+    pnpm lint
+    ```
+
+    Fix all lint errors and warnings. The CI pipeline will fail if lint errors are present.
+  </Step>
+
+  <Step title="Open a pull request">
+    Push your branch and open a PR against `master`. A member of the Pipedream team is automatically assigned as a reviewer.
+
+    PRs for new components should include:
+    - The component file(s)
+    - Any changes to `package.json` for new dependencies
+    - A brief description of what the component does and a link to the API documentation
+  </Step>
+
+  <Step title="Respond to review">
+    The Pipedream team may request changes to naming, descriptions, error handling, or code style. Address all comments and push updates to the same branch.
+  </Step>
+</Steps>
+
+## Spellcheck
+
+A spellchecker runs automatically on Markdown files in pull requests. If the check fails, review the output for misspelled words. Technical terms that are not in a standard English dictionary (like `Pipedream`, `OAuth`, `GitHub`) can be added to the `.wordlist.txt` file in the repository root.
+
+## Getting help
+
+- Post in the [Pipedream community](https://pipedream.com/community/c/dev/11) for development questions.
+- Join the [Pipedream Slack](https://pipedream.com/support) for real-time help.
+- Open a [GitHub issue](https://github.com/PipedreamHQ/pipedream/issues) for bugs or feature requests.

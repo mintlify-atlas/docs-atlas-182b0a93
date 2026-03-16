@@ -1,0 +1,88 @@
+---
+title: "Pricing and plans"
+description: "Overview of Pipedream's free and paid plans, including invocation limits, execution timeouts, and enterprise options."
+---
+
+Pipedream offers a free tier for individual developers and paid plans for teams and businesses that need more capacity, longer execution windows, and priority support.
+
+<Note>
+Pricing details and exact plan limits are maintained at [pipedream.com/pricing](https://pipedream.com/pricing). The information below reflects publicly documented plan details.
+</Note>
+
+## Plans
+
+<CardGroup cols={3}>
+  <Card title="Developer" icon="user">
+    Free for individual developers. No credit card required.
+  </Card>
+  <Card title="Team" icon="users">
+    For teams that need more capacity and collaboration features.
+  </Card>
+  <Card title="Business / Enterprise" icon="building">
+    Custom limits, SSO, SLA support, and a SOC 2 Type 2 report.
+  </Card>
+</CardGroup>
+
+## Plan comparison
+
+<Tabs>
+  <Tab title="Developer (free)">
+    The Developer plan is free for individual developers and includes:
+
+    - **10,000 invocations per month**
+    - **30-second execution timeout** per workflow run
+    - **256 MB memory** per execution
+    - Access to all 2,800+ app integrations
+    - HTTP triggers, timers, and event sources
+    - Node.js, Python, Go, and Bash code steps
+    - 100-event history per source
+    - Community forum support
+
+    <Tip>
+    The free tier is designed to cover most individual developer use cases. You do not need a credit card to sign up.
+    </Tip>
+  </Tab>
+  <Tab title="Team">
+    The Team plan is for organizations that need higher throughput and longer-running workflows:
+
+    - **More invocations per month** than the free tier
+    - **Extended execution timeout** (up to 300 seconds)
+    - **Higher concurrency** for simultaneous workflow executions
+    - Everything in the Developer plan
+    - Priority support
+
+    Contact [support@pipedream.com](mailto:support@pipedream.com) or visit [pipedream.com/pricing](https://pipedream.com/pricing) for current Team plan pricing.
+  </Tab>
+  <Tab title="Business / Enterprise">
+    Enterprise plans are designed for organizations with compliance, security, and scale requirements:
+
+    - **Custom invocation limits** negotiated per contract
+    - **300-second execution timeout**
+    - **Single sign-on (SSO)** integration
+    - **SLA-backed support**
+    - **SOC 2 Type 2 report** available upon request (email [support@pipedream.com](mailto:support@pipedream.com))
+    - Dedicated onboarding and account management
+
+    To discuss Enterprise options, contact [support@pipedream.com](mailto:support@pipedream.com).
+  </Tab>
+</Tabs>
+
+## What counts as an invocation?
+
+An invocation is recorded each time a workflow or event source executes — regardless of whether it completes successfully or returns an error. Both test runs and production runs count toward your monthly total.
+
+## Free tier limits
+
+The Developer plan includes a hard cap of **10,000 invocations per month**. When you reach the limit:
+
+- New workflow executions are paused until the next billing cycle
+- Event sources stop emitting events
+- You receive an email notification when you approach the cap
+
+Upgrade to a paid plan to restore execution capacity before the billing cycle resets.
+
+## SOC 2 compliance
+
+Pipedream has demonstrated SOC 2 compliance. A SOC 2 Type 2 report is available to Business and Enterprise customers upon request. Email [support@pipedream.com](mailto:support@pipedream.com) to request a copy.
+
+For more on data handling and security practices, see the [security page](/reference/security).

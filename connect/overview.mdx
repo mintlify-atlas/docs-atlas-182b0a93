@@ -1,0 +1,91 @@
+---
+title: What is Pipedream Connect
+description: Pipedream Connect lets you embed 2,800+ integrations directly into your product, so your users can connect their accounts and run actions without leaving your app.
+---
+
+Pipedream Connect is an embeddable integration platform for developers. You add it to your product, your users connect their accounts, and your backend can run actions or deploy event-driven triggers on their behalf — all without building or maintaining OAuth flows, credential storage, or API wrappers.
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="bolt" href="/connect/quickstart">
+    Build an end-to-end example in minutes.
+  </Card>
+  <Card title="SDK" icon="code" href="/connect/sdk/installation">
+    Install the TypeScript SDK for backend and frontend use.
+  </Card>
+  <Card title="React" icon="react" href="/connect/react/overview">
+    Drop in prebuilt React components to let users configure integrations.
+  </Card>
+  <Card title="MCP Server" icon="server" href="/connect/mcp/overview">
+    Expose 2,800+ APIs as Model Context Protocol tools for AI agents.
+  </Card>
+</CardGroup>
+
+## How it works
+
+<Steps>
+  <Step title="Create a project">
+    A Pipedream project holds your OAuth credentials and the connected accounts your users create. [Create a project](https://pipedream.com/projects) in the Pipedream dashboard and note its project ID.
+  </Step>
+  <Step title="Create an OAuth client">
+    Pipedream uses client credentials OAuth to authenticate your server. [Create an OAuth client](https://pipedream.com/docs/rest-api/auth#creating-an-oauth-client) and save the client ID and secret.
+  </Step>
+  <Step title="Issue Connect tokens from your server">
+    Your server calls the Pipedream API to create short-lived Connect tokens tied to one of your users. The token authorizes that user to connect accounts and configure integrations.
+  </Step>
+  <Step title="Render the connect UI in your frontend">
+    Pass the token to the frontend SDK or React components. Your users see an OAuth or API-key connection flow for any of the 2,800+ supported apps.
+  </Step>
+  <Step title="Use the connected accounts from your server">
+    Once a user has connected an account, your backend can run actions, deploy triggers, or proxy API calls on their behalf using the backend SDK.
+  </Step>
+</Steps>
+
+## Core concepts
+
+### External users
+
+An **external user** is a user in your system. You identify them with any string — typically the primary key from your own database. Pipedream stores connected accounts under that ID and scopes all API calls to it.
+
+```typescript
+const { token, expires_at } = await client.createConnectToken({
+  external_user_id: "user-123",
+  allowed_origins: ["https://yourapp.com"],
+});
+```
+
+### Connected accounts
+
+A **connected account** is a credential Pipedream stores on behalf of one of your external users. It can be an OAuth token, an API key, or any other authentication type the target app supports. Pipedream handles token refresh automatically.
+
+### Components
+
+Pipedream components are reusable, versioned code units that interact with a specific API. Each component has a unique **key** (e.g. `slack-send-message`). There are two types:
+
+- **Actions** — Run a specific operation (send a Slack message, create a GitHub issue, etc.).
+- **Triggers** — Listen for events and emit them to a webhook or workflow.
+
+### Projects and environments
+
+Each project has two environments: `development` and `production`. Accounts connected in `development` are isolated from `production`. Set the environment when you create the backend client.
+
+## Authentication overview
+
+All server-to-Pipedream API calls are authenticated with a short-lived OAuth access token obtained using your client credentials. The SDK handles token acquisition and renewal automatically.
+
+Frontend API calls use a **Connect token** — a short-lived, scoped token you create on your server and pass to your frontend. Connect tokens are tied to a single external user and expire after a short period.
+
+<Note>
+  Never expose your OAuth client secret or project credentials to the browser. The backend client is server-only.
+</Note>
+
+## Supported apps
+
+Pipedream Connect supports 2,800+ apps, including:
+
+- **Communication** — Slack, Gmail, Outlook, Discord, Twilio
+- **Productivity** — Google Sheets, Notion, Airtable, Asana, Linear
+- **Developer tools** — GitHub, GitLab, Jira, Datadog, PagerDuty
+- **CRM and sales** — Salesforce, HubSpot, Pipedrive
+- **AI** — OpenAI, Anthropic, Pinecone, Cohere
+
+Browse the full list at [pipedream.com/apps](https://pipedream.com/apps).

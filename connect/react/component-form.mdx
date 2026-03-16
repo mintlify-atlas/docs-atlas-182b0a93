@@ -1,0 +1,170 @@
+---
+title: ComponentFormContainer and ComponentForm
+description: Props reference for the ComponentFormContainer and ComponentForm components in @pipedream/connect-react.
+---
+
+`ComponentFormContainer` and `ComponentForm` are the primary UI components in `@pipedream/connect-react`. They render a dynamic configuration form for any Pipedream action or trigger component.
+
+## ComponentFormContainer
+
+`ComponentFormContainer` is the recommended component to use. It accepts a `componentKey` string, fetches the component metadata from the Pipedream registry, and renders `ComponentForm` once the data is available.
+
+```tsx
+import { ComponentFormContainer } from "@pipedream/connect-react";
+
+<ComponentFormContainer
+  userId={userId}
+  componentKey="slack-send-message"
+  configuredProps={configuredProps}
+  onUpdateConfiguredProps={setConfiguredProps}
+/>
+```
+
+### Props
+
+<ParamField body="componentKey" type="string" required>
+  The unique key identifying the component in the Pipedream registry. For example, `"slack-send-message"` or `"github-new-issue"`. Find component keys by browsing [github.com/PipedreamHQ/pipedream/tree/master/components](https://github.com/PipedreamHQ/pipedream/tree/master/components).
+</ParamField>
+
+<ParamField body="userId" type="string" required>
+  The external user ID of the user configuring the form. Must match the ID used to create the Connect token.
+</ParamField>
+
+<ParamField body="configuredProps" type="Record<string, any>">
+  The current configured values for the component's props. Control this with `useState` in your parent component.
+</ParamField>
+
+<ParamField body="onUpdateConfiguredProps" type="function">
+  Callback invoked whenever the user changes a prop value. Receives the updated `configuredProps` object.
+</ParamField>
+
+<ParamField body="onSubmit" type="function">
+  When provided, a submit button appears in the form. Called when the user clicks submit, receiving a `FormContext` object with the final configuration.
+</ParamField>
+
+<ParamField body="propNames" type="string[]">
+  Limit the form to only display specific props by name. Useful when you only need a subset of an action's configuration.
+</ParamField>
+
+<ParamField body="hideOptionalProps" type="boolean">
+  When `true`, hides the optional props section. Defaults to `false`.
+</ParamField>
+
+<ParamField body="oauthAppConfig" type="Record<string, string>">
+  Map of app name slugs to OAuth app IDs. Use when you want users to connect via your own OAuth application rather than Pipedream's default.
+
+  ```tsx
+  oauthAppConfig={{
+    github: "oa_abc123",
+    slack: "oa_xyz789",
+  }}
+  ```
+
+  OAuth app IDs are not sensitive and are safe to include in client-side code.
+</ParamField>
+
+<ParamField body="sdkResponse" type="unknown[] | unknown">
+  The response from a previous `runAction` or `deployTrigger` call. Used with `enableDebugging` to display errors inline in the form.
+</ParamField>
+
+<ParamField body="enableDebugging" type="boolean">
+  When `true`, displays errors from `sdkResponse` inline in the form fields that caused them.
+</ParamField>
+
+---
+
+## ComponentForm
+
+`ComponentForm` is the lower-level component used when you already have a `V1Component` object (e.g. from the `useComponent` hook). All `ComponentFormContainer` props except `componentKey` apply here, plus a `component` prop.
+
+```tsx
+import { ComponentForm } from "@pipedream/connect-react";
+import { useComponent } from "@pipedream/connect-react";
+
+function MyForm() {
+  const { component } = useComponent({ key: "slack-send-message" });
+
+  if (!component) return <div>Loading...</div>;
+
+  return (
+    <ComponentForm
+      component={component}
+      userId={userId}
+      configuredProps={configuredProps}
+      onUpdateConfiguredProps={setConfiguredProps}
+    />
+  );
+}
+```
+
+<ParamField body="component" type="V1Component" required>
+  The component object, typically from the `useComponent` hook or `client.getComponent()`.
+</ParamField>
+
+All other props are the same as `ComponentFormContainer`.
+
+---
+
+## Handling submit
+
+Add `onSubmit` to show a submit button and act on the final configuration:
+
+```tsx
+<ComponentFormContainer
+  userId={userId}
+  componentKey="slack-send-message"
+  configuredProps={configuredProps}
+  onUpdateConfiguredProps={setConfiguredProps}
+  onSubmit={async (ctx) => {
+    const result = await backendClient.runAction({
+      externalUserId: userId,
+      actionId: "slack-send-message",
+      configuredProps: ctx.configuredProps,
+    });
+    console.log(result.exports);
+  }}
+/>
+```
+
+---
+
+## OAuth app configuration
+
+To use your own OAuth app for a specific integration:
+
+```tsx
+const oauthAppConfig = {
+  github: "oa_abc123",
+  google_sheets: "oa_def456",
+};
+
+<ComponentFormContainer
+  userId={userId}
+  componentKey="github-create-issue"
+  configuredProps={configuredProps}
+  onUpdateConfiguredProps={setConfiguredProps}
+  oauthAppConfig={oauthAppConfig}
+/>
+```
+
+Configure OAuth clients in the [Pipedream dashboard](https://pipedream.com/docs/connect/managed-auth/oauth-clients).
+
+---
+
+## App selection and filtering
+
+Use the `SelectApp` component to let users pick an app before rendering the form:
+
+```tsx
+import { SelectApp } from "@pipedream/connect-react";
+
+<SelectApp
+  value={selectedApp}
+  onChange={setSelectedApp}
+  appsOptions={{
+    sortKey: "featured_weight",
+    sortDirection: "desc",
+    hasActions: true,
+  }}
+/>
+```

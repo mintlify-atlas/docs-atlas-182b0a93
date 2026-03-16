@@ -1,0 +1,250 @@
+---
+title: Custom sources
+description: Build event sources that combine HTTP and timer interfaces, use lifecycle hooks, share logic via common modules, and manage complex state.
+---
+
+Beyond simple HTTP or timer sources, Pipedream lets you build sources with multiple interfaces, shared base components, and rich lifecycle management. This page covers advanced patterns used in production Pipedream components.
+
+## Combining HTTP and timer (flex sources)
+
+Some services support both webhooks and polling. A "flex" source handles both by accepting either an HTTP or timer interface and branching in `run`:
+
+```javascript
+import { axios, DEFAULT_POLLING_SOURCE_TIMER_INTERVAL } from "@pipedream/platform";
+
+export default {
+  key: "myapp-new-event-flex",
+  name: "New Event",
+  description: "Emit events via webhook (instant) or polling (timer).",
+  version: "0.0.1",
+  type: "source",
+  dedupe: "unique",
+  props: {
+    myapp: { type: "app", app: "myapp" },
+    http: {
+      type: "$.interface.http",
+      customResponse: true,
+    },
+    timer: {
+      type: "$.interface.timer",
+      default: { intervalSeconds: DEFAULT_POLLING_SOURCE_TIMER_INTERVAL },
+    },
+    db: "$.service.db",
+  },
+  hooks: {
+    async activate() {
+      // Register a webhook so we also get instant notifications
+      const { id } = await this.createWebhook();
+      this.db.set("webhookId", id);
+    },
+    async deactivate() {
+      await this.deleteWebhook(this.db.get("webhookId"));
+    },
+  },
+  methods: {
+    async createWebhook() {
+      return axios(this, {
+        method: "POST",
+        url: "https://api.myapp.com/webhooks",
+        headers: { Authorization: `Bearer ${this.myapp.$auth.api_key}` },
+        data: { url: this.http.endpoint },
+      });
+    },
+    async deleteWebhook(id) {
+      return axios(this, {
+        method: "DELETE",
+        url: `https://api.myapp.com/webhooks/${id}`,
+        headers: { Authorization: `Bearer ${this.myapp.$auth.api_key}` },
+      });
+    },
+    emitEvent({ id, item }) {
+      this.$emit(item, {
+        id,
+        summary: `New event: ${item.type}`,
+        ts: Date.parse(item.created_at),
+      });
+    },
+  },
+  async run(event) {
+    // HTTP path: event has method/path/body
+    if (event.method) {
+      this.http.respond({ status: 200, body: "OK" });
+      this.emitEvent({ id: event.body.id, item: event.body });
+      return;
+    }
+
+    // Timer path: poll the API
+    const lastTs = this.db.get("lastTs") ?? Date.now();
+    const items = await axios(this, {
+      url: "https://api.myapp.com/events",
+      headers: { Authorization: `Bearer ${this.myapp.$auth.api_key}` },
+      params: { since: new Date(lastTs).toISOString() },
+    });
+
+    for (const item of items) {
+      this.emitEvent({ id: item.id, item });
+    }
+
+    this.db.set("lastTs", Date.now());
+  },
+};
+```
+
+## Shared base components
+
+When building multiple sources for the same service, use a common base object and spread it into each component. This is the pattern used in the Pipedream GitHub integration:
+
+```javascript
+// sources/common/common-polling.mjs
+import github from "../../github.app.mjs";
+import { DEFAULT_POLLING_SOURCE_TIMER_INTERVAL } from "@pipedream/platform";
+
+export default {
+  props: {
+    github,
+    timer: {
+      type: "$.interface.timer",
+      default: {
+        intervalSeconds: DEFAULT_POLLING_SOURCE_TIMER_INTERVAL,
+      },
+    },
+    db: "$.service.db",
+  },
+  methods: {
+    _getSavedIds() {
+      return this.db.get("savedIds") || [];
+    },
+    _setSavedIds(value) {
+      this.db.set("savedIds", value);
+    },
+    async getAndProcessData(maxEmits = 0) {
+      const savedIds = this._getSavedIds();
+      const items = await this.getItems();
+
+      items
+        .filter((item) => !savedIds.includes(item.id))
+        .forEach((item, index) => {
+          if (!maxEmits || index < maxEmits) {
+            this.$emit(item, {
+              id: item.id,
+              ...this.getItemMetadata(item),
+            });
+          }
+          savedIds.push(item.id);
+        });
+
+      this._setSavedIds(savedIds);
+    },
+  },
+  hooks: {
+    async deploy() {
+      await this.getAndProcessData(5);
+    },
+  },
+  async run() {
+    await this.getAndProcessData();
+  },
+};
+```
+
+Each specific source spreads the common base and fills in the service-specific methods:
+
+```javascript
+// sources/new-issue/new-issue.mjs
+import common from "../common/common-polling.mjs";
+import github from "../../github.app.mjs";
+
+export default {
+  ...common,
+  key: "github-new-issue",
+  name: "New Issue",
+  description: "Emit new events when a new issue is created in a repository.",
+  version: "0.0.1",
+  type: "source",
+  dedupe: "unique",
+  props: {
+    ...common.props,
+    repoFullname: {
+      propDefinition: [github, "repoFullname"],
+    },
+  },
+  methods: {
+    ...common.methods,
+    async getItems() {
+      return this.github.getIssues({ repoFullname: this.repoFullname });
+    },
+    getItemMetadata(item) {
+      return {
+        summary: `#${item.number} ${item.title}`,
+        ts: Date.parse(item.created_at),
+      };
+    },
+  },
+};
+```
+
+## Dynamic additional props
+
+Use `additionalProps` to show or hide props based on values the user has already configured. Set `reloadProps: true` on any prop to trigger `additionalProps` when that prop's value changes:
+
+```javascript
+export default {
+  key: "myapp-new-record",
+  version: "0.0.1",
+  type: "source",
+  props: {
+    myapp: { type: "app", app: "myapp" },
+    resourceType: {
+      type: "string",
+      label: "Resource Type",
+      options: ["orders", "customers", "products"],
+      reloadProps: true,
+    },
+    db: "$.service.db",
+    timer: {
+      type: "$.interface.timer",
+      default: { intervalSeconds: 300 },
+    },
+  },
+  async additionalProps() {
+    if (this.resourceType === "orders") {
+      return {
+        orderStatus: {
+          type: "string",
+          label: "Order Status",
+          options: ["pending", "completed", "cancelled"],
+          optional: true,
+        },
+      };
+    }
+    return {};
+  },
+  async run() {
+    // this.orderStatus is available here if resourceType === "orders"
+  },
+};
+```
+
+## Alert props
+
+You can surface informational banners in the UI using `type: "alert"` props. These are read-only display elements, not inputs:
+
+```javascript
+props: {
+  infoBox: {
+    type: "alert",
+    alertType: "info",  // "info" | "warning" | "error"
+    content: "This source only emits events from the default branch.",
+  },
+  // ... other props
+},
+```
+
+Alert props are visible in the component UI but are not passed to `run`. Exclude them when destructuring `this` to avoid sending them to an API:
+
+```javascript
+async run({ $ }) {
+  const { myapp, infoBox, ...data } = this; // exclude infoBox
+  return this.myapp.createRecord(data);
+},
+```

@@ -1,0 +1,129 @@
+---
+title: React integration overview
+description: Use @pipedream/connect-react to embed account connection and component configuration flows directly in your React app.
+---
+
+The `@pipedream/connect-react` package provides prebuilt React components and hooks that handle the full integration UI: connecting accounts, configuring action props, and rendering dynamic forms for any of Pipedream's 2,800+ apps.
+
+## Install
+
+```bash
+npm install @pipedream/connect-react @pipedream/sdk
+```
+
+## Quick example
+
+The example below uses Next.js App Router with a server action to issue Connect tokens. The pattern works with any React framework — replace the server action with an API route call.
+
+```typescript
+/* app/actions.ts */
+"use server";
+import { createBackendClient } from "@pipedream/sdk/server";
+
+const client = createBackendClient({
+  environment: process.env.NODE_ENV === "production" ? "production" : "development",
+  projectId: process.env.PIPEDREAM_PROJECT_ID!,
+  credentials: {
+    clientId: process.env.PIPEDREAM_CLIENT_ID!,
+    clientSecret: process.env.PIPEDREAM_CLIENT_SECRET!,
+  },
+});
+
+export async function fetchToken(opts: { externalUserId: string }) {
+  return await client.createConnectToken({
+    external_user_id: opts.externalUserId,
+    allowed_origins: JSON.parse(process.env.PIPEDREAM_ALLOWED_ORIGINS || "[]"),
+  });
+}
+```
+
+```tsx
+/* app/page.tsx */
+"use client";
+import { useState } from "react";
+import { createFrontendClient } from "@pipedream/sdk/browser";
+import {
+  ComponentFormContainer,
+  FrontendClientProvider,
+} from "@pipedream/connect-react";
+import { fetchToken } from "./actions";
+
+export default function Page() {
+  const userId = "my-authed-user-id";
+
+  const client = createFrontendClient({
+    environment: "development",
+    externalUserId: userId,
+    tokenCallback: fetchToken,
+  });
+
+  const [configuredProps, setConfiguredProps] = useState({});
+
+  return (
+    <FrontendClientProvider client={client}>
+      <ComponentFormContainer
+        userId={userId}
+        componentKey="slack-send-message"
+        configuredProps={configuredProps}
+        onUpdateConfiguredProps={setConfiguredProps}
+      />
+    </FrontendClientProvider>
+  );
+}
+```
+
+## Environment variables
+
+Set these in your server environment before running:
+
+```bash
+PIPEDREAM_CLIENT_ID=your_client_id
+PIPEDREAM_CLIENT_SECRET=your_client_secret
+PIPEDREAM_PROJECT_ID=proj_abc123
+PIPEDREAM_ALLOWED_ORIGINS=["https://yourapp.com","http://localhost:3000"]
+```
+
+<Warning>
+  `PIPEDREAM_CLIENT_SECRET` must never be exposed to the browser. Keep it in server-side environment variables only.
+</Warning>
+
+## Key components
+
+| Component | Purpose |
+|---|---|
+| `FrontendClientProvider` | Required wrapper that provides the SDK client and React Query to all child components |
+| `ComponentFormContainer` | Loads a component by key and renders a full configuration form |
+| `ComponentForm` | Lower-level form component when you already have a component object |
+| `CustomizeProvider` | Wraps components to apply custom styles, classes, and theme overrides |
+| `SelectApp` | Dropdown for selecting an app |
+| `SelectComponent` | Dropdown for selecting a component (action or trigger) |
+
+## Architecture
+
+```
+FrontendClientProvider (provides SDK client + React Query)
+  └─ CustomizeProvider (optional, provides theme/style overrides)
+       └─ ComponentFormContainer (fetches component by key)
+            └─ ComponentForm (renders configurable props)
+                 ├─ ControlApp (OAuth connect button)
+                 ├─ ControlInput
+                 ├─ ControlSelect
+                 └─ ControlBoolean
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="ComponentForm and ComponentFormContainer" icon="rectangle-list" href="/connect/react/component-form">
+    Full props reference for the form components.
+  </Card>
+  <Card title="Theming and customization" icon="palette" href="/connect/react/customization">
+    Apply custom styles, class names, and replace inner components.
+  </Card>
+  <Card title="React hooks" icon="hook" href="/connect/react/hooks">
+    Use hooks to fetch apps, components, and accounts directly.
+  </Card>
+  <Card title="OAuth client configuration" icon="key" href="/connect/auth/oauth">
+    Configure custom OAuth apps for specific integrations.
+  </Card>
+</CardGroup>

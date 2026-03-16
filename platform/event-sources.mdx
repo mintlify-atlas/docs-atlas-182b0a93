@@ -1,0 +1,227 @@
+---
+title: "Event sources"
+description: "Event sources watch for new data in external services and emit events that trigger your workflows."
+---
+
+Event sources are the mechanism Pipedream uses to bring external events into workflows. A source subscribes to a service — polling an API, listening for webhooks, or monitoring an RSS feed — and emits each new item as an event. Linked workflows then run for every emitted event.
+
+## How event sources work
+
+<Steps>
+  <Step title="Source subscribes to a service">
+    When you deploy an event source, Pipedream either registers a webhook with the service or starts polling the API on an interval.
+  </Step>
+  <Step title="Source detects new data">
+    The source compares new results against previously seen events and deduplicates them, so each event is emitted exactly once.
+  </Step>
+  <Step title="Source emits an event">
+    New events are emitted and immediately trigger any workflows linked to the source.
+  </Step>
+  <Step title="Workflow runs">
+    The emitted event is available in the workflow at `steps.trigger.event`.
+  </Step>
+</Steps>
+
+## Using pre-built sources
+
+Pipedream provides pre-built sources for thousands of apps. When you create a workflow and select an **App** trigger, you're choosing a pre-built event source.
+
+Examples:
+
+- **GitHub** — new pull request, new issue, new commit, new star
+- **Slack** — new message in a channel, new file uploaded
+- **Google Sheets** — new row added, row updated
+- **RSS** — new item in any feed
+- **Airtable** — new record, updated record
+- **Twitter/X** — new tweet matching a search query
+
+Browse the full list at [pipedream.com/apps](https://pipedream.com/apps).
+
+## Building a custom source
+
+When no pre-built source exists for your use case, you can build your own. Sources are JavaScript (ESM) components with a well-defined structure.
+
+### HTTP source
+
+The simplest source exposes an HTTP endpoint. Any request to the endpoint emits an event:
+
+```javascript
+export default {
+  name: "http",
+  version: "0.0.1",
+  props: {
+    http: "$.interface.http",
+  },
+  run(event) {
+    console.log(event); // event contains method, path, body, headers, query
+  },
+};
+```
+
+Deploying this source gives you a unique HTTPS URL. Send any request and the source emits the full HTTP event.
+
+### HTTP source with custom response
+
+Use `customResponse: true` to control the HTTP response the caller receives:
+
+```javascript
+export default {
+  key: "http-new-requests",
+  name: "New Requests",
+  description: "Emit an event for every inbound HTTP request, with configurable response.",
+  version: "0.1.2",
+  type: "source",
+  props: {
+    httpInterface: {
+      type: "$.interface.http",
+      customResponse: true,
+    },
+    resStatusCode: {
+      type: "string",
+      label: "Response Status Code",
+      optional: true,
+      default: "200",
+    },
+    resBody: {
+      type: "string",
+      label: "Response Body",
+      optional: true,
+      default: '{ "success": true }',
+    },
+  },
+  async run(event) {
+    this.httpInterface.respond({
+      status: this.resStatusCode,
+      body: this.resBody,
+      headers: { "content-type": "application/json" },
+    });
+
+    this.$emit(event, {
+      summary: `${event.method} ${event.path}`,
+    });
+  },
+};
+```
+
+### Timer-based (polling) source
+
+Use `$.interface.timer` to run the source on an interval. Poll an API, compare results to what you've seen before, and emit only new items:
+
+```javascript
+import { DEFAULT_POLLING_SOURCE_TIMER_INTERVAL } from "@pipedream/platform";
+
+export default {
+  key: "my-polling-source",
+  name: "New Items",
+  version: "0.0.1",
+  type: "source",
+  props: {
+    db: "$.service.db",
+    timer: {
+      type: "$.interface.timer",
+      default: {
+        intervalSeconds: DEFAULT_POLLING_SOURCE_TIMER_INTERVAL, // 15 minutes
+      },
+    },
+  },
+  methods: {
+    async getItems() {
+      // fetch from your API
+      return [];
+    },
+    getLastId() {
+      return this.db.get("lastId");
+    },
+    setLastId(id) {
+      this.db.set("lastId", id);
+    },
+  },
+  async run() {
+    const lastId = this.getLastId();
+    const items = await this.getItems();
+
+    for (const item of items) {
+      if (item.id === lastId) break;
+
+      this.$emit(item, {
+        id: item.id,
+        summary: item.title,
+        ts: new Date(item.createdAt).getTime(),
+      });
+    }
+
+    if (items.length > 0) {
+      this.setLastId(items[0].id);
+    }
+  },
+};
+```
+
+## Emitting events
+
+Call `this.$emit(payload, metadata)` to emit an event from a source.
+
+```javascript
+this.$emit(
+  { id: "123", title: "New item" }, // payload — the event data
+  {
+    id: "123",              // deduplication ID — prevents re-emitting the same event
+    summary: "New item",   // short description shown in the UI
+    ts: Date.now(),         // timestamp (milliseconds since epoch)
+  }
+);
+```
+
+| Metadata field | Type | Description |
+|----------------|------|-------------|
+| `id` | string | Unique identifier for deduplication. Same `id` = same event (won't re-emit). |
+| `summary` | string | Short human-readable label shown in the event list. |
+| `ts` | number | Unix timestamp in milliseconds. Used to order events in the UI. |
+
+## Persistent state with `$.service.db`
+
+Sources often need to remember what they've seen across runs (for deduplication). Use the built-in key-value store:
+
+```javascript
+props: {
+  db: "$.service.db",
+},
+methods: {
+  getLastSeen() {
+    return this.db.get("lastSeen");
+  },
+  setLastSeen(value) {
+    this.db.set("lastSeen", value);
+  },
+},
+```
+
+<Note>
+`$.service.db` is scoped to the source instance. Each deployed source has its own isolated key-value store.
+</Note>
+
+## Consuming events outside of workflows
+
+You can consume events emitted by a source without a workflow using:
+
+- **REST API** — poll for events via `GET /sources/{id}/events`
+- **SSE stream** — subscribe to a real-time Server-Sent Events stream for the source
+
+This makes sources useful as lightweight event buses for any consumer, not just Pipedream workflows.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Workflows" icon="workflow" href="/platform/workflows">
+    Connect a source to a workflow to automate actions on each event.
+  </Card>
+  <Card title="Custom code" icon="code" href="/platform/custom-code">
+    Use Node.js to make HTTP requests, transform data, and more in your source.
+  </Card>
+  <Card title="Building components" icon="puzzle-piece" href="/components/sources/overview">
+    Full reference for building and publishing event source components.
+  </Card>
+  <Card title="Actions" icon="zap" href="/platform/actions">
+    Add actions to workflows triggered by your sources.
+  </Card>
+</CardGroup>

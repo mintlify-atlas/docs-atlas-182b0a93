@@ -1,0 +1,355 @@
+---
+title: React hooks reference
+description: React hooks provided by @pipedream/connect-react for fetching apps, components, accounts, and accessing the SDK client and customization context.
+---
+
+All hooks must be used inside a `FrontendClientProvider`. Data-fetching hooks use React Query internally — they cache results and share data across components.
+
+## `useFrontendClient`
+
+Accesses the `BrowserClient` instance provided by `FrontendClientProvider`.
+
+```tsx
+import { useFrontendClient } from "@pipedream/connect-react";
+
+function MyComponent() {
+  const client = useFrontendClient();
+
+  const handleConnect = () => {
+    client.connectAccount({
+      app: "slack",
+      onSuccess: ({ id }) => console.log("Connected:", id),
+    });
+  };
+
+  return <button onClick={handleConnect}>Connect Slack</button>;
+}
+```
+
+Throws if called outside `FrontendClientProvider`.
+
+---
+
+## `useAccounts`
+
+Fetches connected accounts for a user, optionally filtered by app.
+
+```tsx
+import { useAccounts } from "@pipedream/connect-react";
+
+function AccountList() {
+  const { accounts, isLoading, error } = useAccounts({
+    external_user_id: "user-123",
+    app: "slack",
+  });
+
+  if (isLoading) return <div>Loading...</div>;
+  if (error) return <div>Error: {error.message}</div>;
+
+  return (
+    <ul>
+      {accounts.map((account) => (
+        <li key={account.id}>{account.name}</li>
+      ))}
+    </ul>
+  );
+}
+```
+
+### Parameters
+
+<ParamField body="external_user_id" type="string">
+  Filter accounts by your user's ID.
+</ParamField>
+
+<ParamField body="app" type="string">
+  Filter accounts by app name slug.
+</ParamField>
+
+<ParamField body="oauth_app_id" type="string">
+  Filter accounts by OAuth app ID.
+</ParamField>
+
+### Return value
+
+<ResponseField name="accounts" type="Account[]">
+  The list of connected accounts. Empty array while loading.
+</ResponseField>
+
+<ResponseField name="isLoading" type="boolean">
+  `true` while the request is in flight.
+</ResponseField>
+
+<ResponseField name="error" type="Error | null">
+  Any error from the request.
+</ResponseField>
+
+---
+
+## `useApps`
+
+Fetches the list of available apps with filtering, sorting, and pagination.
+
+```tsx
+import { useApps } from "@pipedream/connect-react";
+
+function AppPicker() {
+  const { apps, isLoading, hasMore, loadMore } = useApps({
+    q: "google",
+    sortKey: "featured_weight",
+    sortDirection: "desc",
+    hasActions: true,
+  });
+
+  return (
+    <>
+      {apps.map((app) => (
+        <div key={app.name_slug}>{app.name}</div>
+      ))}
+      {hasMore && <button onClick={loadMore}>Load more</button>}
+    </>
+  );
+}
+```
+
+### Parameters
+
+<ParamField body="q" type="string">
+  Search query to filter apps by name.
+</ParamField>
+
+<ParamField body="sortKey" type="string">
+  Field to sort by. One of `"name"`, `"featured_weight"`, or `"name_slug"`. Defaults to `"name_slug"`.
+</ParamField>
+
+<ParamField body="sortDirection" type="string">
+  Sort direction: `"asc"` or `"desc"`. Defaults to `"asc"`.
+</ParamField>
+
+<ParamField body="hasActions" type="boolean">
+  When `true`, only returns apps that have actions in the Pipedream registry.
+</ParamField>
+
+<ParamField body="hasTriggers" type="boolean">
+  When `true`, only returns apps that have triggers in the Pipedream registry.
+</ParamField>
+
+### Return value
+
+<ResponseField name="apps" type="App[]">
+  Accumulated list of apps across all loaded pages.
+</ResponseField>
+
+<ResponseField name="isLoading" type="boolean">
+  `true` while the initial request is in flight.
+</ResponseField>
+
+<ResponseField name="hasMore" type="boolean">
+  `true` if there are more pages to load.
+</ResponseField>
+
+<ResponseField name="isLoadingMore" type="boolean">
+  `true` while a subsequent page is loading.
+</ResponseField>
+
+<ResponseField name="loadMore" type="function">
+  Call to load the next page of results.
+</ResponseField>
+
+---
+
+## `useApp`
+
+Fetches metadata for a single app by name slug.
+
+```tsx
+import { useApp } from "@pipedream/connect-react";
+
+function AppDetails({ nameSlug }: { nameSlug: string }) {
+  const { app, isLoading } = useApp({ nameSlug });
+
+  if (isLoading) return <div>Loading...</div>;
+  if (!app) return null;
+
+  return (
+    <div>
+      <img src={app.img_src} alt={app.name} />
+      <h2>{app.name}</h2>
+      <p>{app.description}</p>
+    </div>
+  );
+}
+```
+
+### Parameters
+
+<ParamField body="nameSlug" type="string" required>
+  The app's name slug (e.g. `"slack"`, `"github"`).
+</ParamField>
+
+### Return value
+
+<ResponseField name="app" type="App | undefined">
+  The app metadata, or `undefined` while loading.
+</ResponseField>
+
+---
+
+## `useComponents`
+
+Fetches components (actions or triggers) for an app with pagination support.
+
+```tsx
+import { useComponents } from "@pipedream/connect-react";
+
+function ActionList({ app }: { app: string }) {
+  const { components, isLoading, hasMore, loadMore } = useComponents({
+    app,
+    componentType: "action",
+  });
+
+  return (
+    <>
+      {components.map((c) => (
+        <div key={c.key}>{c.name}</div>
+      ))}
+      {hasMore && <button onClick={loadMore}>Load more</button>}
+    </>
+  );
+}
+```
+
+### Parameters
+
+<ParamField body="app" type="string">
+  Filter components by app name slug.
+</ParamField>
+
+<ParamField body="componentType" type="string">
+  Filter by component type: `"action"` or `"trigger"`.
+</ParamField>
+
+<ParamField body="q" type="string">
+  Search query to filter components by name.
+</ParamField>
+
+### Return value
+
+Same shape as `useApps`: `{ components, isLoading, hasMore, isLoadingMore, loadMore }`.
+
+---
+
+## `useComponent`
+
+Fetches metadata for a single component by its key.
+
+```tsx
+import { useComponent } from "@pipedream/connect-react";
+
+function ComponentDetails({ componentKey }: { componentKey: string }) {
+  const { component, isLoading } = useComponent({ key: componentKey });
+
+  if (isLoading) return <div>Loading...</div>;
+  if (!component) return null;
+
+  return (
+    <div>
+      <h3>{component.name}</h3>
+      <p>{component.description}</p>
+      <pre>{JSON.stringify(component.configurable_props, null, 2)}</pre>
+    </div>
+  );
+}
+```
+
+### Parameters
+
+<ParamField body="key" type="string" required>
+  The component key (e.g. `"slack-send-message"`).
+</ParamField>
+
+### Return value
+
+<ResponseField name="component" type="V1Component | undefined">
+  The component metadata including all configurable props.
+</ResponseField>
+
+---
+
+## `useCustomize`
+
+Accesses the current customization context — the resolved theme, styles, and helper functions. Use this inside custom inner components to stay compatible with the customization system.
+
+```tsx
+import { useCustomize } from "@pipedream/connect-react";
+
+function CustomField({ children, name, baseStyles, props }) {
+  const { theme, getProps, getStyles, getClassNames } = useCustomize();
+
+  return (
+    <div {...getProps(name, baseStyles, props)}>
+      {children}
+    </div>
+  );
+}
+```
+
+### Return value
+
+<ResponseField name="theme" type="Theme">
+  The resolved theme object with `colors`, `borderRadius`, and `spacing`.
+</ResponseField>
+
+<ResponseField name="getProps" type="function">
+  `(name, baseStyles, props) => { className, style }` — merges base styles with any user-provided style overrides and class names.
+</ResponseField>
+
+<ResponseField name="getStyles" type="function">
+  `(name, baseStyles, props) => CSSProperties` — returns the merged style object.
+</ResponseField>
+
+<ResponseField name="getClassNames" type="function">
+  `(name, props) => string` — returns the merged class name string.
+</ResponseField>
+
+<ResponseField name="getComponents" type="function">
+  Returns the resolved component library, merging default components with any overrides from `CustomizeProvider`.
+</ResponseField>
+
+---
+
+## `useFormContext`
+
+Accesses the form-level context: the component, all configurable props, and the current configured values.
+
+```tsx
+import { useFormContext } from "@pipedream/connect-react";
+
+function FormDebugger() {
+  const { component, configuredProps } = useFormContext();
+  return <pre>{JSON.stringify(configuredProps, null, 2)}</pre>;
+}
+```
+
+Must be used inside a `ComponentForm` or `ComponentFormContainer`.
+
+---
+
+## `useFormFieldContext`
+
+Accesses context for a single field within a form — the prop definition, current value, and field ID.
+
+```tsx
+import { useFormFieldContext } from "@pipedream/connect-react";
+
+function FieldWrapper({ children }) {
+  const { prop, value, id } = useFormFieldContext();
+  return (
+    <div data-prop-name={prop.name} data-required={!prop.optional}>
+      {children}
+    </div>
+  );
+}
+```
+
+Must be used inside a field component within a `ComponentForm`.

@@ -1,0 +1,85 @@
+---
+title: "Platform limits"
+description: "Runtime and resource limits that apply to Pipedream workflows, event sources, and API usage."
+---
+
+Pipedream enforces limits on workflow execution, memory, payload sizes, and event retention to ensure a reliable, fair-use platform. Paid plans raise several of these limits.
+
+<Note>
+For the most current limit values, check [pipedream.com/docs/limits](https://pipedream.com/docs/limits). The values below reflect the documented limits at the time of writing.
+</Note>
+
+## Execution limits
+
+| Limit | Developer (free) | Paid plans |
+|---|---|---|
+| Workflow execution timeout | 30 seconds | Up to 300 seconds |
+| Memory per execution | 256 MB | 256 MB |
+| Maximum steps per workflow | No hard limit | No hard limit |
+| Concurrent workflow executions | Plan-dependent | Higher on paid tiers |
+
+<Warning>
+Workflows that exceed the execution timeout are terminated. Design long-running tasks to chunk work across multiple executions, or use async patterns.
+</Warning>
+
+## Invocation limits
+
+| Limit | Developer (free) | Paid plans |
+|---|---|---|
+| Invocations per month | 10,000 | Varies by plan |
+| Daily invocation cap | Platform-enforced | Higher on paid tiers |
+
+An **invocation** is counted each time a workflow or event source runs. Both successful and failed executions count toward your monthly total.
+
+## HTTP trigger limits
+
+| Limit | Value |
+|---|---|
+| Maximum HTTP payload size | 512 KB |
+| Request headers | Standard HTTP limits apply |
+
+<Tip>
+If you need to process payloads larger than 512 KB, consider streaming the data to an intermediate store (such as Amazon S3) and passing only a reference in the HTTP trigger payload.
+</Tip>
+
+## Event source limits
+
+| Limit | Value |
+|---|---|
+| Event history retained per source | 100 events |
+| Event retention period | Platform-dependent |
+
+Events older than the retention window or beyond the 100-event history cap are not retrievable from the Pipedream UI or API.
+
+## Code and dependency limits
+
+<AccordionGroup>
+  <Accordion title="Node.js">
+    You can import any package from the npm registry by declaring the import in your code. Pipedream resolves and installs dependencies automatically. There is no pre-approval step for packages.
+  </Accordion>
+  <Accordion title="Python">
+    Import any package from PyPI. Pipedream installs the package at runtime. Some packages with native C extensions may not be available.
+  </Accordion>
+  <Accordion title="Go">
+    Use standard Go module imports. Pipedream compiles your code on each run.
+  </Accordion>
+  <Accordion title="Bash">
+    Common Unix utilities are available. You cannot install arbitrary system packages.
+  </Accordion>
+</AccordionGroup>
+
+## API rate limits
+
+The Pipedream REST API enforces rate limits on a per-user basis. If you exceed the rate limit, the API returns a `429 Too Many Requests` response. Back off and retry with exponential delay.
+
+See the [REST API overview](/api/overview) for authentication and endpoint details.
+
+## Destinations
+
+Destination delivery (S3, Snowflake, HTTP, email, SSE) is asynchronous and subject to the same invocation and timeout limits as workflow steps.
+
+## Reviewing your usage
+
+You can monitor your current invocation count and remaining quota in the Pipedream dashboard under **Settings > Usage**.
+
+If you need higher limits, see the [pricing page](/reference/pricing) for available plans.

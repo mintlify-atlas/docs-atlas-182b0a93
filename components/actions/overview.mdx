@@ -1,0 +1,214 @@
+---
+title: Actions overview
+description: Actions are reusable workflow steps that execute API calls, data transforms, and custom logic. Learn how actions work and when to build your own.
+---
+
+An action is a Pipedream component with `type: "action"`. Actions run as steps inside a workflow. Each step receives the event payload and the outputs of all previous steps, executes its logic, and returns data that the next step can use.
+
+## How actions work
+
+<Steps>
+  <Step title="User adds an action to a workflow">
+    The user picks an action from the step library, connects an account (if required), and fills in the props.
+  </Step>
+  <Step title="The workflow runs">
+    When the trigger fires, Pipedream executes each step in order. The action's `run` method is called with `{ $, steps }`.
+  </Step>
+  <Step title="The action returns data">
+    Whatever `run` returns (or exports via `$.export()`) is stored as step data accessible to subsequent steps.
+  </Step>
+</Steps>
+
+## Minimal action
+
+```javascript
+export default {
+  key: "my-action",
+  name: "My Action",
+  description: "A minimal Pipedream action.",
+  version: "0.0.1",
+  type: "action",
+  async run({ $ }) {
+    return "Hello from my action!";
+  },
+};
+```
+
+## Action with props and API call
+
+Most actions accept user input via props and call an external API. Use `@pipedream/platform`'s `axios` helper to make HTTP requests that appear in the Pipedream UI's step logs:
+
+```javascript
+import { axios } from "@pipedream/platform";
+
+export default {
+  key: "github-create-issue",
+  name: "Create Issue",
+  description: "Create a new issue in a GitHub repository.",
+  version: "0.0.1",
+  type: "action",
+  props: {
+    github: {
+      type: "app",
+      app: "github",
+    },
+    repoFullname: {
+      type: "string",
+      label: "Repository",
+      description: "The full name of the repository, e.g. `owner/repo`.",
+    },
+    title: {
+      type: "string",
+      label: "Title",
+      description: "The title of the issue.",
+    },
+    body: {
+      type: "string",
+      label: "Body",
+      description: "The body text of the issue.",
+      optional: true,
+    },
+  },
+  async run({ $ }) {
+    const response = await axios($, {
+      method: "POST",
+      url: `https://api.github.com/repos/${this.repoFullname}/issues`,
+      headers: {
+        Authorization: `token ${this.github.$auth.oauth_access_token}`,
+        "X-GitHub-Api-Version": "2022-11-28",
+      },
+      data: {
+        title: this.title,
+        body: this.body,
+      },
+    });
+
+    $.export("$summary", `Created issue #${response.number}: ${response.title}`);
+
+    return response;
+  },
+};
+```
+
+## The `run` method signature
+
+The `run` method receives a single object argument with two properties:
+
+- **`$`** (`Pipedream`) — Platform helpers: `$.export()`, `$.respond()`, `$.flow`, `$.files`.
+- **`steps`** (`object`) — The exported data from every previous step. `steps.trigger.event` is the original trigger event.
+
+```javascript
+async run({ $, steps }) {
+  // Access trigger event
+  const triggerBody = steps.trigger.event.body;
+
+  // Access output from a previous step named "get_user"
+  const userId = steps.get_user.$return_value.id;
+
+  // Export named values
+  $.export("userId", userId);
+  $.export("$summary", `Processed user ${userId}`);
+
+  // Return value is stored as $return_value
+  return { processed: true };
+},
+```
+
+## Exporting data
+
+There are two ways to export data from an action:
+
+- **`return value`** — The return value of `run` is stored as `steps.<step-name>.$return_value`.
+- **`$.export(key, value)`** — Export named values accessible as `steps.<step-name>.<key>`. The special key `$summary` sets the human-readable label shown in the workflow editor.
+
+```javascript
+async run({ $ }) {
+  $.export("$summary", "Created 3 records");
+  $.export("recordIds", [1, 2, 3]);
+  return { success: true }; // stored as $return_value
+},
+```
+
+## Ending a workflow early
+
+To stop workflow execution from an action, use `$.flow.exit(reason)`:
+
+```javascript
+async run({ $ }) {
+  if (!this.shouldProcess) {
+    $.flow.exit("Skipping: condition not met");
+  }
+  // ... rest of action
+},
+```
+
+## Using `additionalProps`
+
+Actions support `additionalProps` for dynamic prop rendering. Add `reloadProps: true` to any prop to trigger re-evaluation when it changes:
+
+```javascript
+export default {
+  key: "github-create-issue",
+  version: "0.0.3",
+  type: "action",
+  props: {
+    github,
+    repoFullname: {
+      propDefinition: [github, "repoFullname"],
+      reloadProps: true,
+    },
+  },
+  async additionalProps() {
+    const canPush = await this.checkPushPermission();
+    return canPush
+      ? {
+          assignees: {
+            type: "string[]",
+            label: "Assignees",
+            optional: true,
+          },
+          labels: {
+            type: "string[]",
+            label: "Labels",
+            optional: true,
+          },
+        }
+      : {
+          infoBox: {
+            type: "alert",
+            alertType: "info",
+            content: "Labels and assignees require push access to this repository.",
+          },
+        };
+  },
+};
+```
+
+## MCP annotations
+
+Actions can include an `annotations` field to provide hints when the action is exposed as an MCP tool:
+
+```javascript
+export default {
+  key: "github-create-issue",
+  version: "0.0.1",
+  type: "action",
+  annotations: {
+    destructiveHint: false,  // does not delete or overwrite data
+    readOnlyHint: false,     // mutates state (creates an issue)
+    openWorldHint: true,     // interacts with an external system
+    idempotentHint: false,   // calling twice creates two issues
+  },
+};
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Creating actions" icon="plus" href="/components/actions/creating-actions">
+    Step-by-step guide to building, testing, and publishing actions.
+  </Card>
+  <Card title="Props reference" icon="list" href="/components/actions/props">
+    Full documentation for every prop type.
+  </Card>
+</CardGroup>

@@ -1,0 +1,133 @@
+---
+title: "Authentication"
+description: "Authenticate requests to the Pipedream REST API using API keys or OAuth 2.0."
+---
+
+The Pipedream API supports two authentication methods:
+
+- **API keys** — Recommended for personal scripts and server-side automation where you control the credentials.
+- **OAuth 2.0 (client credentials)** — Recommended for applications that need to act on behalf of a Pipedream project without storing a static token.
+
+## API keys
+
+Pass your API key as a Bearer token in the `Authorization` header of every request.
+
+```bash
+curl https://api.pipedream.com/v1/users/me \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+### Obtain an API key
+
+1. Sign in to [pipedream.com](https://pipedream.com).
+2. Open **Settings → API**.
+3. Copy your API key.
+
+<Warning>
+  Treat your API key like a password. Never expose it in client-side code, public repositories, or logs.
+</Warning>
+
+## OAuth 2.0 (client credentials)
+
+The client credentials flow lets your server obtain a short-lived access token using a `client_id` and `client_secret`. Use this when building applications that integrate with Pipedream on behalf of your users.
+
+### Token endpoint
+
+```
+POST https://api.pipedream.com/v1/oauth/token
+```
+
+### Request
+
+<ParamField body="grant_type" type="string" required>
+  Must be `client_credentials`.
+</ParamField>
+
+<ParamField body="client_id" type="string" required>
+  Your OAuth application's client ID.
+</ParamField>
+
+<ParamField body="client_secret" type="string" required>
+  Your OAuth application's client secret.
+</ParamField>
+
+<ParamField body="project_id" type="string" required>
+  The project ID to scope the token to.
+</ParamField>
+
+<ParamField body="environment" type="string">
+  The environment to target. One of `development` or `production`. Defaults to `production`.
+</ParamField>
+
+<ParamField body="scope" type="string">
+  Space-separated list of OAuth scopes to request.
+</ParamField>
+
+### Response
+
+<ResponseField name="access_token" type="string">
+  The bearer token to include in subsequent API requests.
+</ResponseField>
+
+<ResponseField name="token_type" type="string">
+  Always `Bearer`.
+</ResponseField>
+
+<ResponseField name="expires_in" type="number">
+  Token lifetime in seconds.
+</ResponseField>
+
+### Example
+
+<CodeGroup>
+
+```bash cURL
+curl -X POST https://api.pipedream.com/v1/oauth/token \
+  -H "Content-Type: application/json" \
+  -d '{
+    "grant_type": "client_credentials",
+    "client_id": "YOUR_CLIENT_ID",
+    "client_secret": "YOUR_CLIENT_SECRET",
+    "project_id": "proj_abc123",
+    "environment": "production"
+  }'
+```
+
+```typescript TypeScript (SDK)
+import { createBackendClient } from "@pipedream/sdk/server";
+
+const client = createBackendClient({
+  environment: "production",
+  projectId: "proj_abc123",
+  credentials: {
+    clientId: process.env.PD_CLIENT_ID,
+    clientSecret: process.env.PD_CLIENT_SECRET,
+  },
+});
+```
+
+</CodeGroup>
+
+<Note>
+  The SDK handles token acquisition, caching, and refresh automatically when you use OAuth credentials. You don't need to call the token endpoint manually.
+</Note>
+
+## Using tokens in requests
+
+For both API keys and OAuth access tokens, pass the value as a Bearer token:
+
+```bash
+curl https://api.pipedream.com/v1/users/me \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE"
+```
+
+## Verify your credentials
+
+Confirm that your credentials are working by fetching your user profile:
+
+```bash
+curl https://api.pipedream.com/v1/users/me \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+A successful response returns your Pipedream user record.

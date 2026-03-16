@@ -1,0 +1,91 @@
+---
+title: "Introduction to Pipedream"
+description: "Connect APIs, remarkably fast. Build event-driven automations and workflows connecting 2,800+ apps."
+---
+
+## What is Pipedream?
+
+Pipedream is an integration platform for developers. It provides a hosted platform for connecting apps and developing event-driven automations — free for individual developers.
+
+With Pipedream, you can:
+
+- **Build workflows** that run automations triggered by HTTP requests, timers, or events from any connected app
+- **Use pre-built components** from 2,800+ integrations to perform common actions without writing boilerplate
+- **Write custom code** in Node.js, Python, Go, or Bash when you need logic that pre-built components don't cover
+- **Embed integrations** directly in your product with [Pipedream Connect](/connect/overview)
+- **Connect AI agents** to 2,800+ APIs with the built-in [MCP server](/connect/mcp/overview)
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Build your first workflow in minutes
+  </Card>
+  <Card title="Key Concepts" icon="lightbulb" href="/key-concepts">
+    Understand workflows, sources, and actions
+  </Card>
+  <Card title="Browse Integrations" icon="grid" href="https://pipedream.com/apps">
+    Explore 2,800+ pre-built app integrations
+  </Card>
+  <Card title="Pipedream Connect" icon="plug" href="/connect/overview">
+    Embed OAuth connections in your own app
+  </Card>
+</CardGroup>
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="Workflows" icon="workflow" href="/platform/workflows">
+    Sequences of steps triggered by events — HTTP requests, timers, or new data from any connected app. Write custom Node.js, Python, Go, or Bash code at any step.
+  </Card>
+  <Card title="Event Sources" icon="bolt" href="/platform/event-sources">
+    Watch for new data from GitHub, Slack, Airtable, RSS, and thousands more. When a source finds a new event, it triggers any linked workflow.
+  </Card>
+  <Card title="Actions" icon="zap" href="/platform/actions">
+    Pre-built code steps for common operations — send a Slack message, add a row to Google Sheets, create a GitHub issue — across 1,000+ integrations.
+  </Card>
+  <Card title="Custom Code" icon="code" href="/platform/custom-code">
+    Run any Node.js, Python, Go, or Bash code. Import any package from npm, PyPI, or Go modules. Connect to any integrated app with managed auth.
+  </Card>
+  <Card title="Pipedream Connect" icon="link" href="/connect/overview">
+    Embed Pipedream's OAuth account management and workflow execution into your own app with the SDK and React components.
+  </Card>
+  <Card title="MCP Server" icon="robot" href="/connect/mcp/overview">
+    Expose 2,800+ API tools to AI agents using the Model Context Protocol — with built-in auth and automatic app discovery.
+  </Card>
+</CardGroup>
+
+## How It Works
+
+<Steps>
+  <Step title="Create a trigger">
+    Start a workflow with an HTTP endpoint, a scheduled timer, or an event source that watches for new data in an app like GitHub, Slack, or Google Sheets.
+  </Step>
+  <Step title="Add steps">
+    Chain together pre-built action components or write your own Node.js, Python, Go, or Bash code. Each step can access data from previous steps via `steps`.
+  </Step>
+  <Step title="Deploy and run">
+    Pipedream hosts and runs your workflow. You get real-time logs, error alerting, and a full event history with every input and output inspectable in the UI.
+  </Step>
+</Steps>
+
+## Supported Languages
+
+Write custom code in any of these runtimes within a workflow step:
+
+- **Node.js** — Full access to `npm` packages. Import any package by declaring it in your code.
+- **Python** — Full access to `pip` packages. Import any package and Pipedream installs it automatically.
+- **Go** — Run Go code with access to Go modules.
+- **Bash** — Shell scripts with access to common Unix utilities.
+
+## Get Started
+
+<CardGroup cols={3}>
+  <Card title="Quickstart Guide" icon="play" href="/quickstart">
+    Build your first workflow
+  </Card>
+  <Card title="Build a Component" icon="puzzle-piece" href="/components/quickstart">
+    Create a reusable source or action
+  </Card>
+  <Card title="Embed Connect" icon="code" href="/connect/quickstart">
+    Integrate OAuth into your app
+  </Card>
+</CardGroup>
